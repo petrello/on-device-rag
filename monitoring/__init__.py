@@ -10,6 +10,11 @@ from monitoring.metrics import (
     document_count
 )
 from monitoring.logger import setup_logging
+from monitoring.dashboard import (
+    PerformanceDashboard,
+    display_system_info,
+    display_prometheus_link
+)
 
 __all__ = [
     "track_query_metrics",
@@ -19,5 +24,8 @@ __all__ = [
     "query_counter",
     "query_latency",
     "error_counter",
-    "document_count"
+    "document_count",
+    "PerformanceDashboard",
+    "display_system_info",
+    "display_prometheus_link"
 ]
