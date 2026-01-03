@@ -1,18 +1,14 @@
-# Edge RAG - Production-Ready Modular System
+# On-device RAG
 
-> **Open-Source Retrieval-Augmented Generation Framework for Edge Devices**
+> **Open-Source Retrieval-Augmented Generation Framework for Constrained Devices**
 > 
-> Lightweight, CPU-optimized RAG system designed for resource-constrained environments (8GB RAM, i5/i7 processors)
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![Docker](https://img.shields.io/badge/docker-20.10+-blue.svg)](https://www.docker.com/)
+> Lightweight, CPU-optimized RAG system designed for resource-constrained environments such as laptops and edge devices. Enables local LLM inference with advanced retrieval techniques, all within a Dockerized setup for cross-platform compatibility.
 
 ---
 
 ## 🎯 Overview
 
-Edge RAG is a standardized, containerized environment for deploying production-ready Retrieval-Augmented Generation applications. Built entirely on open-source components, it combines **LlamaIndex** for orchestration, **Qdrant** as the vector database, and **Streamlit** for the user interface.
+On-device RAG is a standardized, containerized environment for deploying Retrieval-Augmented Generation applications. Built entirely on open-source components, it combines **LlamaIndex** for orchestration, **Qdrant** as the vector database, and **Streamlit** for the user interface.
 
 The integration of **Docker** ensures environment parity across different operating systems, abstracting the complexities of C++ compilation and dependency management required for local Large Language Model (LLM) inference.
 
@@ -951,16 +947,6 @@ This project is free to use, modify, and distribute. We appreciate attribution b
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp)** - Efficient CPU inference
 - **[Streamlit](https://github.com/streamlit/streamlit)** - Rapid UI development
 - **[Sentence Transformers](https://www.sbert.net/)** - State-of-the-art embeddings
-- **[Hugging Face](https://huggingface.co/)** - Model hosting and distribution
-
----
-
-## 📧 Support & Community
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/on-device-rag/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/on-device-rag/discussions)
-- **Documentation**: [Wiki](https://github.com/yourusername/on-device-rag/wiki)
-- **Email**: support@on-device-rag.dev
 
 ---
 
@@ -988,21 +974,3 @@ This project is free to use, modify, and distribute. We appreciate attribution b
 - [ ] Mobile-optimized interface
 - [ ] GraphRAG integration
 - [ ] Agentic workflow support
-
-See [ROADMAP.md](ROADMAP.md) for detailed timeline and milestones.
-
----
-
-## 📚 Additional Resources
-
-- **Architecture Details**: [ARCHITECTURE.md](ARCHITECTURE.md)
-- **API Documentation**: [API.md](API.md)
-- **Deployment Guide**: [DEPLOYMENT.md](DEPLOYMENT.md)
-- **Performance Tuning**: [PERFORMANCE.md](PERFORMANCE.md)
-- **Migration Guide**: [MIGRATION.md](MIGRATION.md)
-
----
-
-**Built with ❤️ for edge computing**
-
-*Last updated: January 2026*
