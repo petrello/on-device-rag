@@ -1,56 +1,99 @@
-# Core RAG Framework
+# ============================================================================
+# Edge RAG - Production Requirements
+# ============================================================================
+# Install with: pip install -r requirements.txt
+# Note: llama-cpp-python is installed separately in Dockerfile with CMAKE_ARGS
+
+# ============================================================================
+# CORE RAG FRAMEWORK (Required)
+# ============================================================================
 llama-index-core==0.11.20
 llama-index-llms-llama-cpp==0.3.1
 llama-index-embeddings-huggingface==0.3.1
 
-# Vector Stores
+# ============================================================================
+# VECTOR STORES (Required - at least one)
+# ============================================================================
+# Qdrant - Production vector database (recommended)
 llama-index-vector-stores-qdrant==0.3.1
 qdrant-client==1.11.3
-faiss-cpu==1.8.0  # Alternative local vector store
 
-# Document Processing
-pypdf==4.3.1
-python-docx==1.1.2
-python-magic==0.4.27  # File type detection
+# FAISS - Local vector store (alternative for offline deployments)
+faiss-cpu==1.8.0
 
-# Hybrid Search (BM25)
-rank-bm25==0.2.2
+# ============================================================================
+# DOCUMENT PROCESSING (Required)
+# ============================================================================
+pypdf==4.3.1              # PDF document parsing
+python-docx==1.1.2        # DOCX document parsing
 
-# Web Framework
-streamlit==1.39.0
+# ============================================================================
+# RETRIEVAL & SEARCH (Required)
+# ============================================================================
+rank-bm25==0.2.2          # BM25 for hybrid search
 
-# Monitoring & Metrics
-prometheus-client==0.21.0
-psutil==6.1.0  # Memory profiling (optional)
+# ============================================================================
+# WEB FRAMEWORK (Required)
+# ============================================================================
+streamlit==1.39.0         # Main UI framework
 
-# Logging
-structlog==24.4.0
+# ============================================================================
+# CONFIGURATION (Required)
+# ============================================================================
+pydantic==2.9.2           # Data validation
+pydantic-settings==2.6.1  # Settings management
+python-dotenv==1.0.1      # Environment variables
 
-# Configuration Management
-pydantic==2.9.2
-pydantic-settings==2.6.1
-python-dotenv==1.0.1
+# ============================================================================
+# UTILITIES (Required)
+# ============================================================================
+numpy==1.26.4             # Numerical operations
 
-# Utilities
-numpy==1.26.4
-pandas==2.2.3  # Data manipulation (optional, for analytics)
+# ============================================================================
+# MONITORING & METRICS (Production Recommended)
+# ============================================================================
+prometheus-client==0.21.0 # Metrics export
 
-# Testing (Development)
+# ============================================================================
+# OPTIONAL DEPENDENCIES
+# ============================================================================
+
+# Memory Profiling (enables memory usage display in UI)
+psutil==6.1.0
+
+# Data Visualization (enables charts in monitoring dashboard)
+pandas==2.2.3
+
+# File Type Detection (more robust than extension checking)
+# python-magic==0.4.27
+
+# Advanced Logging (alternative to built-in logging)
+# structlog==24.4.0
+
+# ============================================================================
+# DEVELOPMENT DEPENDENCIES
+# ============================================================================
+
+# Testing Framework
 pytest==8.3.3
 pytest-cov==5.0.0
 pytest-asyncio==0.24.0
 
-# Type Checking (Development)
+# Type Checking
 mypy==1.13.0
 
-# Code Quality (Development)
+# Code Quality & Formatting
 black==24.10.0
 ruff==0.7.4
 
-# Optional: Advanced Features
-# sentence-transformers==3.3.1  # Alternative embedding models
-# transformers==4.46.3  # Hugging Face models
-# torch==2.5.1  # PyTorch (only if using transformer models)
+# ============================================================================
+# OPTIONAL ADVANCED FEATURES
+# ============================================================================
+# Uncomment these if you need advanced embedding models or transformer support
 
-# Note: llama-cpp-python is installed separately in Dockerfile
-# with CMAKE_ARGS for optimal CPU performance
+# Alternative Embedding Models
+# sentence-transformers==3.3.1
+
+# Hugging Face Transformers
+# transformers==4.46.3
+# torch==2.5.1
