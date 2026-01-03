@@ -1,11 +1,11 @@
-"""Document management helpers: processor, indexer, uploader."""
+"""Document management package."""
 
+from document_management.uploader import DocumentUploader
 from document_management.processor import DocumentProcessor
-from document_management.indexer import Indexer
-from document_management.uploader import Uploader
+from document_management.indexer import DocumentIndexer
 
 __all__ = [
+    "DocumentUploader",
     "DocumentProcessor",
-    "Indexer",
-    "Uploader",
+    "DocumentIndexer",
 ]
