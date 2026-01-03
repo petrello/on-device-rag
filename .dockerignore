@@ -1,0 +1,12 @@
+# Escludi le cartelle dei dati e dei modelli dal build
+embeddings/
+qdrant_storage/
+data/
+models/
+
+# Escludi file di sistema e log
+__pycache__/
+*.pyc
+.env
+.git
+.dockerignore

@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Data directories
+data/*
+!data/.gitkeep
+models/*
+!models/.gitkeep
+embeddings/*
+!embeddings/.gitkeep
+storage/*
+!storage/.gitkeep
+logs/*
+!logs/.gitkeep
+qdrant_storage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Monitoring
+prometheus_data/
+grafana_data/
+
+
+#Here, the following files remain to be implemented:
+#
+#document_management/
+#* __init__.py
+#* indexer.py
+#* processor.py
+#* uploader.py
+#
+#monitoring/
+#* __init__.py
+#* dashboard.py
+#
+#ui/
+#* __init__py
+#* chat.py
+#* document_viewer.py
+#* sidebar.py
+#
+#utils/
+#* __init__.py
+#* validator.py
+#
+#tests/
+#* __init__.py
+#* test_chunking.py
+#* test_retrieval.py
+#* test_vector_store.py
+#
+#after you completed all these implementation steps, you must finally update the app.py file containing the main stramlit application.
