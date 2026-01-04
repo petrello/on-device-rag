@@ -7,62 +7,64 @@
 # ============================================================================
 # CORE RAG FRAMEWORK (Required)
 # ============================================================================
-llama-index-core==0.11.20
-llama-index-llms-llama-cpp==0.3.1
-llama-index-embeddings-huggingface==0.3.1
+llama-index-core
+llama-index-llms-llama-cpp
+llama-index-embeddings-huggingface
 
 # ============================================================================
 # VECTOR STORES (Required - at least one)
 # ============================================================================
 # Qdrant - Production vector database (recommended)
-llama-index-vector-stores-qdrant==0.3.1
-qdrant-client==1.11.3
+llama-index-vector-stores-qdrant
+qdrant-client
 
 # FAISS - Local vector store (alternative for offline deployments)
-faiss-cpu==1.8.0
+llama-index-vector-stores-faiss
+faiss-cpu
 
 # ============================================================================
 # DOCUMENT PROCESSING (Required)
 # ============================================================================
-pypdf==4.3.1              # PDF document parsing
-python-docx==1.1.2        # DOCX document parsing
+pypdf              # PDF document parsing
+python-docx        # DOCX document parsing
+llama-index-readers-file
 
 # ============================================================================
 # RETRIEVAL & SEARCH (Required)
 # ============================================================================
-rank-bm25==0.2.2          # BM25 for hybrid search
+rank-bm25          # BM25 for hybrid search
 
 # ============================================================================
 # WEB FRAMEWORK (Required)
 # ============================================================================
-streamlit==1.39.0         # Main UI framework
+streamlit         # Main UI framework
 
 # ============================================================================
 # CONFIGURATION (Required)
 # ============================================================================
-pydantic==2.9.2           # Data validation
-pydantic-settings==2.6.1  # Settings management
-python-dotenv==1.0.1      # Environment variables
+pydantic           # Data validation
+pydantic-settings  # Settings management
+python-dotenv      # Environment variables
 
 # ============================================================================
 # UTILITIES (Required)
 # ============================================================================
-numpy==1.26.4             # Numerical operations
+numpy             # Numerical operations
 
 # ============================================================================
 # MONITORING & METRICS (Production Recommended)
 # ============================================================================
-prometheus-client==0.21.0 # Metrics export
+prometheus-client # Metrics export
 
 # ============================================================================
 # OPTIONAL DEPENDENCIES
 # ============================================================================
 
 # Memory Profiling (enables memory usage display in UI)
-psutil==6.1.0
+psutil
 
 # Data Visualization (enables charts in monitoring dashboard)
-pandas==2.2.3
+pandas
 
 # File Type Detection (more robust than extension checking)
 # python-magic==0.4.27
@@ -75,16 +77,16 @@ pandas==2.2.3
 # ============================================================================
 
 # Testing Framework
-pytest==8.3.3
-pytest-cov==5.0.0
-pytest-asyncio==0.24.0
+pytest
+pytest-cov
+pytest-asyncio
 
 # Type Checking
-mypy==1.13.0
+mypy
 
 # Code Quality & Formatting
-black==24.10.0
-ruff==0.7.4
+black
+ruff
 
 # ============================================================================
 # OPTIONAL ADVANCED FEATURES
