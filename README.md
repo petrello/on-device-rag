@@ -570,6 +570,51 @@ VECTOR_STORE_TYPE=faiss
 
 ---
 
+## Monitoring
+
+This project uses Docker Profiles to manage resource usage on your machine. Since running the full monitoring stack (Prometheus + Grafana) consumes extra RAM, you can choose how to launch the system.
+
+1. Basic Mode (Recommended for 8GB RAM)
+Runs only the core RAG application and the Qdrant vector database. This is the most memory-efficient way to use the tool.
+
+```bash
+docker compose up --build
+```
+
+App UI: http://localhost:8501
+
+Qdrant Dashboard: http://localhost:6333/dashboard
+
+2. Monitoring Mode (Full Stack)
+Runs the RAG app, Qdrant, Prometheus, and Grafana. Use this if you want to track CPU usage, inference speed, and token generation metrics.
+
+```bash
+docker compose --profile monitoring up --build
+```
+Grafana: http://localhost:3000 (Default login: admin / admin)
+
+Prometheus: http://localhost:9090
+
+3. Stopping the System
+To stop all containers and clear the internal network:
+
+```bash
+# Stop basic mode
+docker compose down
+
+# Stop everything including monitoring
+docker compose --profile monitoring down
+```
+
+### Pro-Tips for Developers
+Clean Rebuild: If you change the requirements.txt or the Dockerfile, use: docker compose build --no-cache
+
+View Logs: If the app doesn't start, check the error logs with: docker logs streamlit_rag
+
+Data Persistence: Your uploaded PDFs are stored in ./data, and the mathematical brain (vectors) is stored in ./qdrant_storage. These will persist even if you delete the containers.
+
+---
+
 ## 🧪 Testing
 
 ```bash

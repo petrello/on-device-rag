@@ -23,6 +23,7 @@ storage/*
 logs/*
 !logs/.gitkeep
 qdrant_storage/
+faiss_storage/
 
 # IDE
 .vscode/

@@ -10,3 +10,8 @@ __pycache__/
 .env
 .git
 .dockerignore
+*.pyo
+*.pyd
+.venv/
+venv/
+.gitignore
