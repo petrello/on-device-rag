@@ -18,8 +18,6 @@ models/*
 !models/.gitkeep
 embeddings/*
 !embeddings/.gitkeep
-storage/*
-!storage/.gitkeep
 logs/*
 !logs/.gitkeep
 qdrant_storage/
