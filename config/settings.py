@@ -130,7 +130,7 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
         case_sensitive = False
 
-    @validator("DATA_DIR", "MODELS_DIR", "EMBEDDINGS_DIR", "STORAGE_DIR", "FAISS_INDEX_PATH")
+    @validator("DATA_DIR", "MODELS_DIR", "EMBEDDINGS_DIR", "FAISS_INDEX_PATH")
     def create_directories(cls, v):
         """Ensure directories exist."""
         v = Path(v)

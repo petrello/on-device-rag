@@ -243,144 +243,107 @@ def render_chat_tab():
         text_qa_template=QA_PROMPT
     )
 
-    # Initialize citation extractor
-    citation_extractor = CitationExtractor()
-
-    # Render sidebar
-    if 'conversation_memory' not in st.session_state:
-        st.session_state.conversation_memory = ConversationMemory()
-
-    render_sidebar(vector_store, st.session_state.conversation_memory)
-
     # Initialize conversation memory
     if 'conversation_memory' not in st.session_state:
         st.session_state.conversation_memory = ConversationMemory()
+
+    # Render sidebar
+    render_sidebar(vector_store, st.session_state.conversation_memory)
 
     # Initialize chat messages
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Trim chat history if needed
-    if len(st.session_state.messages) > settings.MAX_CHAT_HISTORY * 2:
-        st.session_state.messages = st.session_state.messages[-(settings.MAX_CHAT_HISTORY * 2):]
-        cleanup_memory()
-        logger.info("Chat history trimmed")
+    # 1. Create the container FIRST to reserve the top portion of the screen
+    history_container = st.container()
 
-    # Display welcome message for new users
-    if not st.session_state.messages:
-        display_welcome_message()
+    # 2. Display existing history inside the container
+    with history_container:
+        if not st.session_state.messages:
+            display_welcome_message()
 
-    # Display chat history
-    display_chat_history(st.session_state.messages, citation_extractor)
+        citation_extractor = CitationExtractor()
+        display_chat_history(st.session_state.messages, citation_extractor)
 
-    # Chat input
+    # 3. Render chat input (This stays at the bottom of the script/page)
     prompt = render_chat_input()
 
     if prompt:
-        # Validate query
+        # Validate and Sanitize
         is_valid, error_msg = validate_query(prompt)
         if not is_valid:
             st.error(f"⚠️ Invalid query: {error_msg}")
             return
 
-        # Sanitize input
         prompt = sanitize_text(prompt, max_length=5000)
 
-        # Check memory threshold
         if check_memory_threshold():
-            logger.warning("Memory threshold exceeded, cleaning up")
             cleanup_memory()
 
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        # 4. Handle the NEW messages INSIDE the history container
+        with history_container:
+            # ADD TO STATE ONLY ONCE
+            st.session_state.messages.append({"role": "user", "content": prompt})
 
-        with st.chat_message("user"):
-            st.markdown(prompt)
+            # Display new user message immediately
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-        # Generate response
-        with st.chat_message("assistant"):
-            try:
-                # Start timer
-                start_time = time.time()
+            # Generate and display response INSIDE the same container block
+            with st.chat_message("assistant"):
+                try:
+                    start_time = time.time()
 
-                # Enhance query with conversation context
-                enhanced_query = prompt
-                if settings.ENABLE_CONVERSATION_MEMORY:
-                    context = st.session_state.conversation_memory.get_context()
-                    if context:
-                        enhanced_query = (
-                            f"Previous conversation:\n{context}\n\n"
-                            f"Current question: {prompt}"
-                        )
-                        logger.debug("Using conversation context")
+                    # Enhance query
+                    enhanced_query = prompt
+                    if settings.ENABLE_CONVERSATION_MEMORY:
+                        context = st.session_state.conversation_memory.get_context()
+                        if context:
+                            enhanced_query = f"Previous conversation:\n{context}\n\nQuestion: {prompt}"
 
-                # Query with metrics tracking
-                @track_query_metrics
-                def run_query(q):
-                    return query_engine.query(q)
+                    # Query with metrics tracking
+                    @track_query_metrics
+                    def run_query(q):
+                        return query_engine.query(q)
 
-                streaming_response = run_query(enhanced_query)
+                    # Run query (calling the tracked query function)
+                    streaming_response = run_query(enhanced_query)
 
-                # Stream response
-                response_text = format_streaming_response(streaming_response.response_gen)
+                    # Stream response to UI
+                    response_text = format_streaming_response(streaming_response.response_gen)
+                    latency = time.time() - start_time
 
-                # Calculate latency
-                latency = time.time() - start_time
-
-                # Extract citations
-                citations = []
-                if settings.ENABLE_CITATIONS and streaming_response.source_nodes:
-                    try:
+                    # Handle Citations
+                    citations = []
+                    if settings.ENABLE_CITATIONS and streaming_response.source_nodes:
                         citations = citation_extractor.extract_citations(
                             response_text,
                             streaming_response.source_nodes
                         )
-
                         if citations:
                             with st.expander("📚 View Sources", expanded=False):
                                 for i, citation in enumerate(citations, 1):
-                                    st.markdown(
-                                        citation_extractor.format_citation_markdown(citation, i),
-                                        unsafe_allow_html=True
-                                    )
-                    except Exception as e:
-                        logger.error(f"Citation extraction failed: {e}")
+                                    st.markdown(citation_extractor.format_citation_markdown(citation, i),
+                                                unsafe_allow_html=True)
 
-                # Save to history
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": response_text,
-                    "citations": citations
-                })
+                    # Update State and Memory
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": response_text,
+                        "citations": citations
+                    })
 
-                # Update conversation memory
-                if settings.ENABLE_CONVERSATION_MEMORY:
-                    st.session_state.conversation_memory.add_exchange(
-                        prompt,
-                        response_text
-                    )
+                    if settings.ENABLE_CONVERSATION_MEMORY:
+                        st.session_state.conversation_memory.add_exchange(prompt, response_text)
 
-                # Record performance
-                st.session_state.dashboard.record_query(latency)
+                    st.session_state.dashboard.record_query(latency)
+                    st.caption(f"⏱️ Response time: {latency:.2f}s")
 
-                # Update memory metric
-                if settings.ENABLE_METRICS:
-                    update_memory_usage()
-
-                # Display query info
-                st.caption(f"⏱️ Response time: {latency:.2f}s")
-
-            except Exception as e:
-                logger.error(f"Query failed: {e}", exc_info=True)
-                display_error_message(e)
-
-                # Save error to history
-                error_msg = f"⚠️ An error occurred: {str(e)}"
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": error_msg
-                })
-
+                except Exception as e:
+                    logger.error(f"Query failed: {e}", exc_info=True)
+                    error_msg = f"⚠️ An error occurred: {str(e)}"
+                    st.error(error_msg)
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
 def render_documents_tab():
     """Render document management interface."""

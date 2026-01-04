@@ -19,13 +19,13 @@ class CitationExtractor:
             highlight_length: Characters to show before/after citation
         """
         self.highlight_length = (
-                highlight_length or settings.CITATION_HIGHLIGHT_LENGTH
+            highlight_length or settings.CITATION_HIGHLIGHT_LENGTH
         )
 
     def extract_citations(
-            self,
-            answer: str,
-            source_nodes: List
+        self,
+        answer: str,
+        source_nodes: List
     ) -> List[Dict]:
         """
         Extract citations from answer and link to sources.
