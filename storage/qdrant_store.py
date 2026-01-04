@@ -3,11 +3,11 @@ Qdrant vector store implementation.
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 from llama_index.core.schema import TextNode, NodeWithScore
-from llama_index.core import VectorStoreIndex
+from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from storage.vector_store import VectorStoreInterface
 from config import settings
@@ -45,6 +45,8 @@ class QdrantStore(VectorStoreInterface):
             collection_name=settings.QDRANT_COLLECTION
         )
 
+        self._storage_context: Optional[StorageContext] = None
+
     def _ensure_collection(self):
         """Ensure collection exists with correct configuration."""
         collections = self.client.get_collections().collections
@@ -72,9 +74,9 @@ class QdrantStore(VectorStoreInterface):
         pass
 
     def query(
-            self,
-            query_embedding: List[float],
-            top_k: int = 3
+        self,
+        query_embedding: List[float],
+        top_k: int = 3
     ) -> List[NodeWithScore]:
         """Query Qdrant with embedding."""
         results = self.client.search(
@@ -98,7 +100,22 @@ class QdrantStore(VectorStoreInterface):
 
     def get_index(self) -> VectorStoreIndex:
         """Get LlamaIndex vector store index."""
-        return VectorStoreIndex.from_vector_store(self.vector_store)
+        storage_context = self.get_storage_context()
+        return VectorStoreIndex.from_vector_store(
+            self.vector_store,
+            storage_context=storage_context
+        )
+
+    def get_storage_context(self) -> StorageContext:
+        """
+        Get storage context for creating new indices.
+        This is the method that should be used when building new indices.
+        """
+        if self._storage_context is None:
+            self._storage_context = StorageContext.from_defaults(
+                vector_store=self.vector_store
+            )
+        return self._storage_context
 
     def delete_all(self) -> None:
         """Delete all nodes from collection."""
@@ -107,6 +124,7 @@ class QdrantStore(VectorStoreInterface):
         try:
             self.client.delete_collection(settings.QDRANT_COLLECTION)
             self._ensure_collection()
+            self._storage_context = None
             logger.info("Collection recreated")
         except Exception as e:
             logger.error(f"Failed to delete collection: {e}")

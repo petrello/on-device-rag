@@ -60,10 +60,13 @@ class DocumentIndexer:
                 nodes_to_index, _ = self.chunker.chunk_documents(documents)
                 logger.info(f"Created {len(nodes_to_index)} chunks")
 
+            # Get storage context from vector store
+            storage_context = self.vector_store.get_storage_context()
+
             # Build index
             index = VectorStoreIndex(
                 nodes_to_index,
-                storage_context=self.vector_store.get_index().storage_context,
+                storage_context=storage_context,
                 show_progress=show_progress
             )
 
