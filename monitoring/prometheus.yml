@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Streamlit RAG App
+  - job_name: 'rag-app'
+    static_configs:
+      - targets: ['rag-app:8001']
+
+  # Qdrant Vector DB
+  - job_name: 'qdrant'
+    metrics_path: '/metrics' # Explicitly define this
+    static_configs:
+      - targets: ['qdrant:6333']
