@@ -31,8 +31,13 @@ class HybridRetriever:
         self.bm25: Optional[BM25Okapi] = None
         self.corpus_nodes: List[TextNode] = []
         self.node_id_to_idx: Dict[str, int] = {}
+        self._index = None  # FIX: Added to hold the vector index
 
         logger.info(f"Initialized HybridRetriever with alpha={self.alpha}")
+
+    def set_index(self, index):
+        """Link the LlamaIndex object for vector retrieval."""
+        self._index = index
 
     def index_nodes(self, nodes: List[TextNode]):
         """
@@ -58,7 +63,6 @@ class HybridRetriever:
     def retrieve(
             self,
             query: str,
-            vector_results: List[NodeWithScore],
             top_k: int = None
     ) -> List[NodeWithScore]:
         """
@@ -66,7 +70,6 @@ class HybridRetriever:
 
         Args:
             query: Search query
-            vector_results: Results from vector search
             top_k: Number of results to return
 
         Returns:
@@ -75,19 +78,29 @@ class HybridRetriever:
         if top_k is None:
             top_k = settings.SIMILARITY_TOP_K
 
+        # 1. FIX: Perform Vector Search Internally
+        vector_results = []
+        if self._index:
+            # Use the stored index to get vector results
+            vector_retriever = self._index.as_retriever(similarity_top_k=top_k)
+            vector_results = vector_retriever.retrieve(query)
+        else:
+            logger.warning("Vector index not set. Returning empty vector results.")
+
+        # 2. Check BM25 status
         if not self.bm25:
             logger.warning("BM25 not initialized, returning vector results only")
-            return vector_results[:top_k]
+            return vector_results
 
-        # Get BM25 scores
+        # 3. Get BM25 scores
         tokenized_query = query.lower().split()
         bm25_scores = self.bm25.get_scores(tokenized_query)
 
-        # Normalize scores
+        # 4. Normalize scores
         vector_scores = self._normalize_vector_scores(vector_results)
         bm25_scores_norm = self._normalize_scores(bm25_scores)
 
-        # Combine scores
+        # 5. Combine scores
         combined_scores = {}
 
         # Add vector scores
@@ -179,18 +192,27 @@ class HybridRetriever:
 
 
 class VectorOnlyRetriever:
-    """Simple vector-only retrieval (no BM25)."""
+    """Retriever that performs vector search using the provided index."""
 
-    def retrieve(
-            self,
-            query: str,
-            vector_results: List[NodeWithScore],
-            top_k: int = None
-    ) -> List[NodeWithScore]:
-        """Return vector results as-is."""
+    def __init__(self):
+        self._index = None
+
+    def set_index(self, index):
+        """Link the LlamaIndex object once it is built/loaded."""
+        self._index = index
+
+    def retrieve(self, query: str, top_k: int = None) -> List[NodeWithScore]:
+        """Performs search and returns results."""
+        if self._index is None:
+            logger.error("Attempted retrieval before index was initialized.")
+            return []
+
         if top_k is None:
             top_k = settings.SIMILARITY_TOP_K
-        return vector_results[:top_k]
+
+        # Use LlamaIndex's native retriever for consistency and speed
+        base_retriever = self._index.as_retriever(similarity_top_k=top_k)
+        return base_retriever.retrieve(query)
 
 
 def get_retriever(use_hybrid: bool = None) -> HybridRetriever | VectorOnlyRetriever:

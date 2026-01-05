@@ -55,8 +55,8 @@ class LLMManager:
                         "n_gpu_layers": 0,  # Force CPU
                         "n_threads": settings.LLM_THREADS,
                         "n_batch": settings.LLM_BATCH_SIZE,
-                        "use_mlock": False,  # Don't lock memory
-                        "use_mmap": True,  # Use memory mapping
+                        "use_mlock": True,#False  # Don't lock memory
+                        "use_mmap": False, #True # Use memory mapping
                         "low_vram": True,  # Enable low VRAM mode
                     },
                     verbose=False,

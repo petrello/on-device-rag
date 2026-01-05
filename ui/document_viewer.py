@@ -8,6 +8,7 @@ import streamlit as st
 from document_management import DocumentUploader
 
 logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def render_document_manager():

@@ -21,16 +21,15 @@ from document_management import DocumentProcessor, DocumentIndexer
 from monitoring import (
     start_metrics_server,
     track_query_metrics,
-    update_memory_usage,
     PerformanceDashboard,
     display_system_info,
-    display_prometheus_link
+    display_prometheus_link,
+    PerformanceTracker,
 )
 from ui import (
     display_chat_history,
     render_chat_input,
     display_welcome_message,
-    display_error_message,
     format_streaming_response,
     render_sidebar,
     render_document_manager
@@ -236,6 +235,9 @@ def render_chat_tab():
             chunker
         )
 
+    # Set index in retriever
+    retriever.set_index(index)
+
     # Create query engine
     query_engine = index.as_query_engine(
         streaming=True,
@@ -292,7 +294,7 @@ def render_chat_tab():
             # Generate and display response INSIDE the same container block
             with st.chat_message("assistant"):
                 try:
-                    start_time = time.time()
+                    overall_start_time = time.time()
 
                     # Enhance query
                     enhanced_query = prompt
@@ -301,17 +303,75 @@ def render_chat_tab():
                         if context:
                             enhanced_query = f"Previous conversation:\n{context}\n\nQuestion: {prompt}"
 
-                    # Query with metrics tracking
-                    @track_query_metrics
-                    def run_query(q):
-                        return query_engine.query(q)
+                    # =========================================================================
+                    # RETRIEVAL PHASE
+                    # =========================================================================
+                    retrieval_start = time.time()
+                    try:
+                        # Retrieve documents using the retriever
+                        retrieved_nodes = retriever.retrieve(enhanced_query)
+                        retrieval_time = time.time() - retrieval_start
 
-                    # Run query (calling the tracked query function)
-                    streaming_response = run_query(enhanced_query)
+                        # Record retrieval metrics
+                        st.session_state.dashboard.record_retrieval(
+                            latency=retrieval_time,
+                            docs_count=len(retrieved_nodes) if retrieved_nodes else 0
+                        )
+                        logger.info(f"Retrieved {len(retrieved_nodes) if retrieved_nodes else 0} documents in {retrieval_time:.3f}s")
+                    except Exception as e:
+                        logger.error(f"Retrieval failed: {e}")
+                        retrieval_time = time.time() - retrieval_start
+                        st.session_state.dashboard.record_retrieval(latency=retrieval_time, docs_count=0)
+                        raise
 
-                    # Stream response to UI
-                    response_text = format_streaming_response(streaming_response.response_gen)
-                    latency = time.time() - start_time
+                    # =========================================================================
+                    # INFERENCE PHASE
+                    # =========================================================================
+                    inference_start = time.time()
+                    first_token_received = False
+                    ttft = None
+                    token_count = 0
+
+                    # Create a custom streaming wrapper to capture first token
+                    original_response_gen = None
+
+                    def counting_stream_generator(response_gen):
+                        """Wrapper to count tokens and track TTFT."""
+                        nonlocal first_token_received, ttft, token_count
+                        for idx, token in enumerate(response_gen):
+                            if idx == 0 and not first_token_received:
+                                ttft = time.time() - inference_start
+                                st.session_state.dashboard.record_inference(ttft=ttft)
+                                first_token_received = True
+                                logger.info(f"Time to First Token: {ttft:.3f}s")
+                            token_count += 1
+                            yield token
+
+                    # Run query
+                    streaming_response = query_engine.query(enhanced_query)
+
+                    # Stream response to UI with custom generator
+                    response_text = format_streaming_response(
+                        counting_stream_generator(streaming_response.response_gen)
+                    )
+
+                    inference_time = time.time() - inference_start
+
+                    # Record full inference metrics
+                    st.session_state.dashboard.record_inference(
+                        total_latency=inference_time,
+                        token_count=token_count
+                    )
+
+                    overall_latency = time.time() - overall_start_time
+                    logger.info(
+                        f"Query completed - "
+                        f"Retrieval: {retrieval_time:.3f}s, "
+                        f"TTFT: {ttft:.3f}s if ttft else 'N/A', "
+                        f"Inference: {inference_time:.2f}s, "
+                        f"Total: {overall_latency:.2f}s, "
+                        f"Tokens: {token_count}"
+                    )
 
                     # Handle Citations
                     citations = []
@@ -330,14 +390,35 @@ def render_chat_tab():
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": response_text,
-                        "citations": citations
+                        "citations": citations,
+                        "metrics": {
+                            "retrieval_time": retrieval_time,
+                            "ttft": ttft,
+                            "inference_time": inference_time,
+                            "total_time": overall_latency,
+                            "token_count": token_count
+                        }
                     })
 
                     if settings.ENABLE_CONVERSATION_MEMORY:
                         st.session_state.conversation_memory.add_exchange(prompt, response_text)
 
-                    st.session_state.dashboard.record_query(latency)
-                    st.caption(f"⏱️ Response time: {latency:.2f}s")
+                    st.session_state.dashboard.record_query(overall_latency)
+
+                    # Display performance metrics
+                    st.markdown("---")
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.caption(f"🔍 Retrieval: {retrieval_time:.3f}s")
+                    with col2:
+                        if ttft:
+                            st.caption(f"⚡ TTFT: {ttft:.3f}s")
+                        else:
+                            st.caption("⚡ TTFT: N/A")
+                    with col3:
+                        st.caption(f"🤖 Inference: {inference_time:.2f}s")
+                    with col4:
+                        st.caption(f"📊 Tokens: {token_count}")
 
                 except Exception as e:
                     logger.error(f"Query failed: {e}", exc_info=True)

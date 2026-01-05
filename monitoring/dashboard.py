@@ -13,6 +13,14 @@ import streamlit as st
 from monitoring.metrics import (
     query_counter,
     query_latency,
+    retrieval_counter,
+    retrieval_latency,
+    retrieval_docs_returned,
+    inference_counter,
+    time_to_first_token,
+    inference_latency,
+    tokens_generated,
+    tokens_per_second,
     error_counter,
     active_sessions,
     memory_usage_mb,
@@ -125,8 +133,11 @@ class PerformanceDashboard:
             history_size: Number of historical data points to keep
         """
         self.history_size = history_size
-        self.query_history = deque(maxlen=history_size)  # stores timestamps of recorded samples
+        self.query_history = deque(maxlen=history_size)
         self.latency_history = deque(maxlen=history_size)
+        self.retrieval_latency_history = deque(maxlen=history_size)
+        self.inference_latency_history = deque(maxlen=history_size)
+        self.ttft_history = deque(maxlen=history_size)
         self.memory_history = deque(maxlen=history_size)
         self.timestamp_history = deque(maxlen=history_size)
 
@@ -157,17 +168,64 @@ class PerformanceDashboard:
         # Update memory metric using the helper in metrics.py (if available)
         try:
             update_memory_usage()
-            # try to read psutil-based value via memory_usage_mb
             mem_val = _safe_get_counter_value(memory_usage_mb)
             if mem_val:
                 self.memory_history.append(mem_val)
             else:
-                # fallback to utils.get_memory_usage
                 mem_info = get_memory_usage()
                 self.memory_history.append(mem_info["rss_mb"] if mem_info else None)
         except Exception:
             mem_info = get_memory_usage()
             self.memory_history.append(mem_info["rss_mb"] if mem_info else None)
+
+    def record_retrieval(self, latency: float, docs_count: int = 0):
+        """Record retrieval operation metrics.
+
+        Args:
+            latency: Retrieval latency in seconds
+            docs_count: Number of documents retrieved
+        """
+        timestamp = datetime.now()
+        self.retrieval_latency_history.append(latency)
+
+        try:
+            retrieval_counter.inc()
+            retrieval_latency.observe(latency)
+            if docs_count > 0:
+                retrieval_docs_returned.observe(docs_count)
+        except Exception as e:
+            logger.debug(f"Failed to record retrieval metrics: {e}")
+
+    def record_inference(self, ttft: float = None, total_latency: float = None,
+                        token_count: int = 0):
+        """Record inference operation metrics.
+
+        Args:
+            ttft: Time to first token in seconds
+            total_latency: Total inference latency in seconds
+            token_count: Number of tokens generated
+        """
+        timestamp = datetime.now()
+
+        if ttft is not None:
+            self.ttft_history.append(ttft)
+            try:
+                time_to_first_token.observe(ttft)
+            except Exception as e:
+                logger.debug(f"Failed to record TTFT: {e}")
+
+        if total_latency is not None:
+            self.inference_latency_history.append(total_latency)
+            try:
+                inference_counter.inc()
+                inference_latency.observe(total_latency)
+
+                if token_count > 0:
+                    tokens_generated.observe(token_count)
+                    tps = token_count / total_latency if total_latency > 0 else 0
+                    tokens_per_second.observe(tps)
+            except Exception as e:
+                logger.debug(f"Failed to record inference metrics: {e}")
 
     def sync_from_metrics(self):
         """Pull current values from Prometheus metrics and append to history.
@@ -213,6 +271,23 @@ class PerformanceDashboard:
         min_latency = min(self.latency_history) if self.latency_history else 0.0
         max_latency = max(self.latency_history) if self.latency_history else 0.0
 
+        # Retrieval metrics
+        total_retrievals = int(_safe_get_counter_value(retrieval_counter))
+        avg_retrieval_latency = _safe_get_histogram_avg(retrieval_latency)
+        min_retrieval_latency = min(self.retrieval_latency_history) if self.retrieval_latency_history else 0.0
+        max_retrieval_latency = max(self.retrieval_latency_history) if self.retrieval_latency_history else 0.0
+
+        # Inference metrics
+        total_inferences = int(_safe_get_counter_value(inference_counter))
+        avg_ttft = _safe_get_histogram_avg(time_to_first_token)
+        avg_inference_latency = _safe_get_histogram_avg(inference_latency)
+        min_ttft = min(self.ttft_history) if self.ttft_history else 0.0
+        max_ttft = max(self.ttft_history) if self.ttft_history else 0.0
+        min_inference_latency = min(self.inference_latency_history) if self.inference_latency_history else 0.0
+        max_inference_latency = max(self.inference_latency_history) if self.inference_latency_history else 0.0
+        avg_tokens_generated = _safe_get_histogram_avg(tokens_generated)
+        avg_tps = _safe_get_histogram_avg(tokens_per_second)
+
         # memory: prefer prometheus gauge
         try:
             update_memory_usage()
@@ -229,10 +304,30 @@ class PerformanceDashboard:
         errors = int(_safe_get_counter_value(error_counter))
 
         return {
+            # Query-level
             "total_queries": total_queries,
             "avg_latency": avg_latency,
             "min_latency": min_latency,
             "max_latency": max_latency,
+
+            # Retrieval-level
+            "total_retrievals": total_retrievals,
+            "avg_retrieval_latency": avg_retrieval_latency,
+            "min_retrieval_latency": min_retrieval_latency,
+            "max_retrieval_latency": max_retrieval_latency,
+
+            # Inference-level
+            "total_inferences": total_inferences,
+            "avg_ttft": avg_ttft,
+            "min_ttft": min_ttft,
+            "max_ttft": max_ttft,
+            "avg_inference_latency": avg_inference_latency,
+            "min_inference_latency": min_inference_latency,
+            "max_inference_latency": max_inference_latency,
+            "avg_tokens_generated": avg_tokens_generated,
+            "avg_tps": avg_tps,
+
+            # System
             "current_memory_mb": current_memory,
             "active_sessions": active,
             "document_count": docs,
@@ -254,30 +349,103 @@ class PerformanceDashboard:
 
         stats = self.get_stats()
 
-        # Display key metrics
-        col1, col2, col3, col4 = st.columns(4)
+        # Create tabs for different metric categories
+        tab1, tab2, tab3, tab4 = st.tabs(["🔄 RAG Pipeline", "🔍 Retrieval", "🤖 Inference", "💾 System"])
+
+        with tab1:
+            self._display_query_metrics(stats)
+
+        with tab2:
+            self._display_retrieval_metrics(stats)
+
+        with tab3:
+            self._display_inference_metrics(stats)
+
+        with tab4:
+            self._display_system_metrics(stats)
+
+    def _display_query_metrics(self, stats):
+        """Display overall RAG pipeline metrics."""
+        st.markdown("### Overall RAG Pipeline")
+
+        col1, col2, col3 = st.columns(3)
 
         with col1:
             st.metric("Total Queries", f"{stats['total_queries']}")
-            st.text(f"Errors: {stats['total_errors']}")
-
         with col2:
-            st.metric("Avg Latency", f"{stats['avg_latency']:.2f}s")
-            st.text(f"Active Sessions: {stats['active_sessions']}")
-
+            st.metric("Avg Total Latency", f"{stats['avg_latency']:.2f}s")
         with col3:
             st.metric("Min / Max", f"{stats['min_latency']:.2f}s", delta=f"{stats['max_latency']:.2f}s")
-            st.text(f"Indexed Docs: {stats['document_count']}")
 
-        with col4:
-            if stats['current_memory_mb'] > 0:
-                st.metric("Memory", f"{stats['current_memory_mb']:.0f}MB")
-
-        # Display charts if there's data
         if len(self.latency_history) > 0:
+            st.markdown("**Query Latency Trend**")
             self._display_latency_chart()
 
+    def _display_retrieval_metrics(self, stats):
+        """Display retrieval performance metrics."""
+        st.markdown("### Document Retrieval Performance")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Total Retrievals", f"{stats['total_retrievals']}")
+        with col2:
+            st.metric("Avg Retrieval Time", f"{stats['avg_retrieval_latency']:.3f}s")
+        with col3:
+            st.metric("Min / Max", f"{stats['min_retrieval_latency']:.3f}s", delta=f"{stats['max_retrieval_latency']:.3f}s")
+
+        if len(self.retrieval_latency_history) > 0:
+            st.markdown("**Retrieval Latency Trend**")
+            self._display_retrieval_latency_chart()
+
+    def _display_inference_metrics(self, stats):
+        """Display LLM inference performance metrics."""
+        st.markdown("### LLM Inference Performance")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("Total Inferences", f"{stats['total_inferences']}")
+        with col2:
+            st.metric("Avg TTFT", f"{stats['avg_ttft']:.3f}s")
+            st.caption(f"Min/Max: {stats['min_ttft']:.3f}s / {stats['max_ttft']:.3f}s")
+        with col3:
+            st.metric("Avg Inference Time", f"{stats['avg_inference_latency']:.2f}s")
+            st.caption(f"Min/Max: {stats['min_inference_latency']:.2f}s / {stats['max_inference_latency']:.2f}s")
+        with col4:
+            st.metric("Avg Tokens", f"{stats['avg_tokens_generated']:.0f}")
+            st.metric("Avg Throughput", f"{stats['avg_tps']:.1f} tok/s")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if len(self.ttft_history) > 0:
+                st.markdown("**Time-to-First-Token Trend**")
+                self._display_ttft_chart()
+
+        with col2:
+            if len(self.inference_latency_history) > 0:
+                st.markdown("**Inference Latency Trend**")
+                self._display_inference_latency_chart()
+
+    def _display_system_metrics(self, stats):
+        """Display system-level metrics."""
+        st.markdown("### System Resources")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Active Sessions", f"{stats['active_sessions']}")
+        with col2:
+            st.metric("Indexed Documents", f"{stats['document_count']}")
+        with col3:
+            st.metric("Total Errors", f"{stats['total_errors']}")
+
+        if stats['current_memory_mb'] > 0:
+            st.markdown("**Memory Usage**")
+            st.metric("Current Memory", f"{stats['current_memory_mb']:.0f}MB")
+
         if len(self.memory_history) > 0 and any(m is not None for m in self.memory_history):
+            st.markdown("**Memory Trend**")
             self._display_memory_chart()
 
     def _display_latency_chart(self):
@@ -293,6 +461,73 @@ class PerformanceDashboard:
             df = pd.DataFrame({
                 'Time': list(self.timestamp_history),
                 'Latency (s)': list(self.latency_history)
+            })
+
+            st.line_chart(df.set_index('Time'))
+
+        except ImportError:
+            st.info("Install pandas for charts: pip install pandas")
+
+    def _display_retrieval_latency_chart(self):
+        """Display retrieval latency over time chart."""
+        if not _ensure_streamlit():
+            return
+        try:
+            import pandas as pd
+
+            if not self.retrieval_latency_history:
+                return
+
+            # Use a subset of timestamp history to match retrieval latency history length
+            times = list(self.timestamp_history)[-len(self.retrieval_latency_history):]
+
+            df = pd.DataFrame({
+                'Time': times,
+                'Retrieval Latency (s)': list(self.retrieval_latency_history)
+            })
+
+            st.line_chart(df.set_index('Time'))
+
+        except ImportError:
+            st.info("Install pandas for charts: pip install pandas")
+
+    def _display_inference_latency_chart(self):
+        """Display inference latency over time chart."""
+        if not _ensure_streamlit():
+            return
+        try:
+            import pandas as pd
+
+            if not self.inference_latency_history:
+                return
+
+            times = list(self.timestamp_history)[-len(self.inference_latency_history):]
+
+            df = pd.DataFrame({
+                'Time': times,
+                'Inference Latency (s)': list(self.inference_latency_history)
+            })
+
+            st.line_chart(df.set_index('Time'))
+
+        except ImportError:
+            st.info("Install pandas for charts: pip install pandas")
+
+    def _display_ttft_chart(self):
+        """Display time-to-first-token over time chart."""
+        if not _ensure_streamlit():
+            return
+        try:
+            import pandas as pd
+
+            if not self.ttft_history:
+                return
+
+            times = list(self.timestamp_history)[-len(self.ttft_history):]
+
+            df = pd.DataFrame({
+                'Time': times,
+                'TTFT (s)': list(self.ttft_history)
             })
 
             st.line_chart(df.set_index('Time'))

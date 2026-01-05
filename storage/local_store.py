@@ -29,7 +29,6 @@ class LocalStore(VectorStoreInterface):
 
         # Initialize FAISS index
         self.faiss_index = faiss.IndexFlatL2(settings.EMBEDDING_DIM)
-        # self.faiss_index = faiss.IndexHNSWFlat(settings.EMBEDDING_DIM, 16)
         self.nodes: List[TextNode] = []
 
         # Load existing index if available
