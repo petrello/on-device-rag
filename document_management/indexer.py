@@ -1,29 +1,53 @@
 """
-Indexing and refresh logic.
-Manages document indexing into vector store.
+Document indexing and refresh logic.
+
+Manages document chunking and indexing into the vector store.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import List, Dict, Optional
-from llama_index.core import VectorStoreIndex, Document
+from typing import TYPE_CHECKING, Dict, List, Tuple
+
+from llama_index.core import Document, VectorStoreIndex
 from llama_index.core.schema import TextNode
+
 from config import settings
 from core import get_chunker
 from monitoring import document_count
+
+if TYPE_CHECKING:
+    from core.retrieval import HybridRetriever, VectorOnlyRetriever
+    from storage.vector_store import VectorStoreInterface
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentIndexer:
-    """Manages document indexing operations."""
+    """
+    Manages document indexing operations.
 
-    def __init__(self, vector_store, retriever=None):
+    Handles chunking, embedding, and storing documents in the vector store.
+    Supports both hierarchical and simple chunking strategies.
+
+    Attributes:
+        vector_store: The vector store backend.
+        retriever: Optional retriever for hybrid search indexing.
+        chunker: Document chunker instance.
+        parent_map: Mapping of child node IDs to parent text.
+    """
+
+    def __init__(
+        self,
+        vector_store: VectorStoreInterface,
+        retriever: HybridRetriever | VectorOnlyRetriever | None = None,
+    ) -> None:
         """
-        Initialize indexer.
+        Initialize the indexer.
 
         Args:
-            vector_store: Vector store instance
-            retriever: Retriever instance (for hybrid search)
+            vector_store: Vector store backend.
+            retriever: Optional retriever for hybrid search.
         """
         self.vector_store = vector_store
         self.retriever = retriever
@@ -33,22 +57,21 @@ class DocumentIndexer:
     def index_documents(
         self,
         documents: List[Document],
-        show_progress: bool = True
-    ) -> tuple[VectorStoreIndex, Dict[str, str]]:
+        show_progress: bool = True,
+    ) -> Tuple[VectorStoreIndex, Dict[str, str]]:
         """
-        Index documents into vector store.
+        Index documents into the vector store.
 
         Args:
-            documents: Documents to index
-            show_progress: Whether to show progress bar
+            documents: Documents to index.
+            show_progress: Whether to display a progress bar.
 
         Returns:
-            Tuple of (index, parent_map)
+            Tuple of (vector_store_index, parent_map).
         """
         try:
             logger.info(f"Indexing {len(documents)} documents...")
 
-            # Create chunks
             if settings.USE_HIERARCHICAL_CHUNKING:
                 child_nodes, self.parent_map = self.chunker.chunk_documents(documents)
                 logger.info(
@@ -60,22 +83,18 @@ class DocumentIndexer:
                 nodes_to_index, _ = self.chunker.chunk_documents(documents)
                 logger.info(f"Created {len(nodes_to_index)} chunks")
 
-            # Get storage context from vector store
             storage_context = self.vector_store.get_storage_context()
 
-            # Build index
             index = VectorStoreIndex(
                 nodes_to_index,
                 storage_context=storage_context,
-                show_progress=show_progress
+                show_progress=show_progress,
             )
 
-            # Index for hybrid retrieval if enabled
             if self.retriever and hasattr(self.retriever, 'index_nodes'):
                 logger.info("Indexing nodes for hybrid retrieval...")
                 self.retriever.index_nodes(nodes_to_index)
 
-            # Update metrics
             if settings.ENABLE_METRICS:
                 document_count.set(len(documents))
 

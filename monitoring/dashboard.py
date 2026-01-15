@@ -1,30 +1,34 @@
 """
 Performance tracking dashboard.
-Provides metrics visualization and monitoring.
+
+Provides real-time metrics visualization and monitoring for the RAG pipeline.
+Uses Prometheus metrics as the source of truth with in-memory history for trends.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Dict
 from collections import deque
 from datetime import datetime
+from typing import Any, Deque, Dict, Optional
 
 import streamlit as st
 
 from monitoring.metrics import (
+    active_sessions,
+    document_count,
+    error_counter,
+    inference_counter,
+    inference_latency,
+    memory_usage_mb,
     query_counter,
     query_latency,
     retrieval_counter,
-    retrieval_latency,
     retrieval_docs_returned,
-    inference_counter,
+    retrieval_latency,
     time_to_first_token,
-    inference_latency,
     tokens_generated,
     tokens_per_second,
-    error_counter,
-    active_sessions,
-    memory_usage_mb,
-    document_count,
     update_memory_usage,
 )
 from utils import get_memory_usage
@@ -32,14 +36,19 @@ from utils import get_memory_usage
 logger = logging.getLogger(__name__)
 
 
-def _safe_get_counter_value(counter) -> float:
-    """Safely extract a numeric total from a Counter or labeled Counter.
+def _safe_get_counter_value(counter: Any) -> float:
+    """
+    Safely extract a numeric total from a Prometheus Counter or Gauge.
 
-    Works with simple Counters/Gauges (._value.get()) and with labeled counters
-    (._value is a dict of values).
+    Handles both simple counters and labeled counters with multiple values.
+
+    Args:
+        counter: Prometheus metric object.
+
+    Returns:
+        Numeric total value, or 0.0 on failure.
     """
     try:
-        # simple counter/gauge
         return float(counter._value.get())
     except Exception:
         pass
@@ -50,7 +59,6 @@ def _safe_get_counter_value(counter) -> float:
             total = 0.0
             for v in vals.values():
                 try:
-                    # v may be a ValueClass with .get()
                     total += float(v.get())
                 except Exception:
                     try:
@@ -61,16 +69,13 @@ def _safe_get_counter_value(counter) -> float:
     except Exception:
         pass
 
-    # As a last resort, try collect() and sum sample values
     try:
         total = 0.0
         for metric in counter.collect():
             for sample in metric.samples:
-                # sample is a tuple-like object with .value attribute in some versions
                 val = getattr(sample, 'value', None)
                 if val is None:
                     try:
-                        # older interface: sample[2]
                         val = float(sample[2])
                     except Exception:
                         val = 0.0
@@ -80,8 +85,16 @@ def _safe_get_counter_value(counter) -> float:
         return 0.0
 
 
-def _safe_get_histogram_avg(hist) -> float:
-    """Compute average from a prometheus Histogram (sum / count) if available."""
+def _safe_get_histogram_avg(hist: Any) -> float:
+    """
+    Compute average from a Prometheus Histogram (sum / count).
+
+    Args:
+        hist: Prometheus Histogram object.
+
+    Returns:
+        Average value, or 0.0 on failure.
+    """
     try:
         count = float(hist._count.get())
         if count == 0:
@@ -89,9 +102,7 @@ def _safe_get_histogram_avg(hist) -> float:
         total = float(hist._sum.get())
         return total / count
     except Exception:
-        # fallback: return 0
         try:
-            # try collect
             for metric in hist.collect():
                 sum_v = 0.0
                 count_v = 0.0
@@ -110,43 +121,46 @@ def _safe_get_histogram_avg(hist) -> float:
 
 
 def _ensure_streamlit() -> bool:
-    """Return True if streamlit is available, otherwise log and return False."""
+    """Check if Streamlit is available for rendering."""
     if st is None:
-        logger.debug("Streamlit not available; dashboard display functions are disabled.")
+        logger.debug("Streamlit not available; dashboard disabled.")
         return False
     return True
 
 
 class PerformanceDashboard:
-    """Tracks and displays performance metrics.
+    """
+    Tracks and displays performance metrics.
 
-    This dashboard uses the Prometheus metrics objects defined in
-    `monitoring.metrics` as the primary source of truth, while keeping a small
-    in-memory history for plotting min/max and recent trends.
+    Uses Prometheus metrics as the primary source of truth while maintaining
+    in-memory history for min/max calculations and trend visualization.
+
+    Attributes:
+        history_size: Maximum number of data points to retain.
     """
 
-    def __init__(self, history_size: int = 100):
+    def __init__(self, history_size: int = 100) -> None:
         """
-        Initialize dashboard.
+        Initialize the dashboard.
 
         Args:
-            history_size: Number of historical data points to keep
+            history_size: Number of historical data points to keep.
         """
         self.history_size = history_size
-        self.query_history = deque(maxlen=history_size)
-        self.latency_history = deque(maxlen=history_size)
-        self.retrieval_latency_history = deque(maxlen=history_size)
-        self.inference_latency_history = deque(maxlen=history_size)
-        self.ttft_history = deque(maxlen=history_size)
-        self.memory_history = deque(maxlen=history_size)
-        self.timestamp_history = deque(maxlen=history_size)
+        self.query_history: Deque[datetime] = deque(maxlen=history_size)
+        self.latency_history: Deque[float] = deque(maxlen=history_size)
+        self.retrieval_latency_history: Deque[float] = deque(maxlen=history_size)
+        self.inference_latency_history: Deque[float] = deque(maxlen=history_size)
+        self.ttft_history: Deque[float] = deque(maxlen=history_size)
+        self.memory_history: Deque[Optional[float]] = deque(maxlen=history_size)
+        self.timestamp_history: Deque[datetime] = deque(maxlen=history_size)
 
-    def record_query(self, latency: float):
+    def record_query(self, latency: float) -> None:
         """
-        Record a query execution both in local history and in Prometheus metrics.
+        Record a query execution.
 
         Args:
-            latency: Query latency in seconds
+            latency: Query latency in seconds.
         """
         timestamp = datetime.now()
         # Update in-memory history

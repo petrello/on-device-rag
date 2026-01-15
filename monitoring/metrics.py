@@ -1,12 +1,25 @@
-"""Prometheus metrics collection."""
+"""
+Prometheus metrics collection.
+
+Defines metrics for monitoring RAG pipeline performance including
+query latency, retrieval times, and LLM inference metrics.
+"""
+
+from __future__ import annotations
 
 import logging
-from prometheus_client import Counter, Histogram, Gauge, start_http_server
-from functools import wraps
 import time
+from functools import wraps
+from typing import Any, Callable, Optional, TypeVar
+
+from prometheus_client import Counter, Gauge, Histogram, start_http_server
+
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Type variable for decorator
+F = TypeVar('F', bound=Callable[..., Any])
 
 # ============================================================================
 # Query-Level Metrics (Overall RAG Pipeline)
@@ -103,9 +116,12 @@ document_count = Gauge(
 )
 
 
-def track_query_metrics(func):
-    """Decorator to track query metrics."""
+def track_query_metrics(func: F) -> F:
+    """
+    Decorator to track overall query metrics.
 
+    Increments query counter and records latency histogram.
+    """
     @wraps(func)
     def wrapper(*args, **kwargs):
         query_counter.inc()
@@ -119,12 +135,15 @@ def track_query_metrics(func):
             error_counter.labels(type=type(e).__name__).inc()
             raise
 
-    return wrapper
+    return wrapper  # type: ignore
 
 
-def track_retrieval_metrics(func):
-    """Decorator to track retrieval metrics."""
+def track_retrieval_metrics(func: F) -> F:
+    """
+    Decorator to track retrieval metrics.
 
+    Records retrieval count, latency, and number of documents returned.
+    """
     @wraps(func)
     def wrapper(*args, **kwargs):
         retrieval_counter.inc()
@@ -135,7 +154,6 @@ def track_retrieval_metrics(func):
             elapsed = time.time() - start_time
             retrieval_latency.observe(elapsed)
 
-            # Track number of documents returned if available
             if isinstance(result, list):
                 retrieval_docs_returned.observe(len(result))
 
@@ -144,12 +162,15 @@ def track_retrieval_metrics(func):
             error_counter.labels(type=type(e).__name__).inc()
             raise
 
-    return wrapper
+    return wrapper  # type: ignore
 
 
-def track_inference_metrics(func):
-    """Decorator to track inference metrics."""
+def track_inference_metrics(func: F) -> F:
+    """
+    Decorator to track LLM inference metrics.
 
+    Records inference count and latency.
+    """
     @wraps(func)
     def wrapper(*args, **kwargs):
         inference_counter.inc()
@@ -164,31 +185,38 @@ def track_inference_metrics(func):
             error_counter.labels(type=type(e).__name__).inc()
             raise
 
-    return wrapper
+    return wrapper  # type: ignore
 
 
 class PerformanceTracker:
-    """Context manager for detailed performance tracking."""
+    """
+    Context manager for detailed performance tracking.
 
-    def __init__(self, operation_name: str = "operation"):
-        """Initialize tracker.
+    Tracks operation timing, time-to-first-token, and token generation.
+    """
+
+    __slots__ = ('operation_name', 'start_time', 'first_token_time', 'end_time', 'token_count')
+
+    def __init__(self, operation_name: str = "operation") -> None:
+        """
+        Initialize the tracker.
 
         Args:
-            operation_name: Name of operation being tracked
+            operation_name: Name of the operation being tracked.
         """
         self.operation_name = operation_name
-        self.start_time = None
-        self.first_token_time = None
-        self.end_time = None
-        self.token_count = 0
+        self.start_time: Optional[float] = None
+        self.first_token_time: Optional[float] = None
+        self.end_time: Optional[float] = None
+        self.token_count: int = 0
 
-    def __enter__(self):
+    def __enter__(self) -> PerformanceTracker:
         """Start tracking."""
         self.start_time = time.time()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """End tracking and record metrics."""
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        """End tracking and record error if any."""
         self.end_time = time.time()
 
         if exc_type is not None:
@@ -197,18 +225,19 @@ class PerformanceTracker:
 
         return True
 
-    def record_first_token(self):
-        """Record the time when first token was generated."""
+    def record_first_token(self) -> None:
+        """Record time when first token was generated."""
         if self.start_time and self.first_token_time is None:
             self.first_token_time = time.time()
             ttft = self.first_token_time - self.start_time
             time_to_first_token.observe(ttft)
 
-    def record_completion(self, token_count: int = 0):
-        """Record inference completion with token count.
+    def record_completion(self, token_count: int = 0) -> None:
+        """
+        Record inference completion with token count.
 
         Args:
-            token_count: Number of tokens generated
+            token_count: Number of tokens generated.
         """
         if self.start_time and self.end_time:
             elapsed = self.end_time - self.start_time
@@ -220,11 +249,13 @@ class PerformanceTracker:
                 tokens_per_second.observe(tps)
 
 
+def start_metrics_server(port: Optional[int] = None) -> None:
+    """
+    Start the Prometheus metrics HTTP server.
 
-
-
-def start_metrics_server(port: int = None):
-    """Start Prometheus metrics server."""
+    Args:
+        port: Port to serve metrics on. Defaults to settings.METRICS_PORT.
+    """
     port = port or settings.METRICS_PORT
 
     try:
@@ -234,14 +265,15 @@ def start_metrics_server(port: int = None):
         logger.warning(f"Failed to start metrics server: {e}")
 
 
-def update_memory_usage():
-    """Update memory usage metric."""
+def update_memory_usage() -> None:
+    """Update the memory usage gauge metric."""
     try:
         import psutil
         process = psutil.Process()
         mem_info = process.memory_info()
         memory_usage_mb.set(mem_info.rss / 1024 / 1024)
     except ImportError:
-        pass  # psutil not installed
+        logger.debug("psutil not available for memory monitoring")
+        pass
     except Exception as e:
         logger.debug(f"Failed to update memory metric: {e}")

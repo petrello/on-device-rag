@@ -1,5 +1,7 @@
 """
 Tests for chunking module.
+
+Tests hierarchical and simple chunking implementations.
 """
 
 import pytest
@@ -9,8 +11,8 @@ from core.chunking import HierarchicalChunker, SimpleChunker, get_chunker
 
 @pytest.fixture
 def sample_document():
-    """Create sample document for testing."""
-    text = "This is a test document. " * 100  # 500 words
+    """Create a sample document for testing."""
+    text = "This is a test document. " * 100  # ~2500 chars
     return Document(text=text, metadata={"file_name": "test.pdf"})
 
 
@@ -31,7 +33,7 @@ class TestHierarchicalChunker:
     """Test hierarchical chunking functionality."""
 
     def test_initialization(self):
-        """Test chunker initialization."""
+        """Test chunker initialization with custom sizes."""
         chunker = HierarchicalChunker(
             child_chunk_size=400,
             parent_chunk_size=1200
@@ -41,7 +43,7 @@ class TestHierarchicalChunker:
         assert chunker.parent_chunk_size == 1200
 
     def test_chunk_documents(self, sample_document):
-        """Test document chunking."""
+        """Test that documents are split into hierarchical chunks."""
         chunker = HierarchicalChunker(
             child_chunk_size=100,
             parent_chunk_size=300
@@ -49,16 +51,14 @@ class TestHierarchicalChunker:
 
         child_nodes, parent_map = chunker.chunk_documents([sample_document])
 
-        # Should create multiple chunks
         assert len(child_nodes) > 0
         assert len(parent_map) > 0
-
-        # All children should have parents
+        # All children should have parent mappings
         for child in child_nodes:
             assert child.node_id in parent_map
 
     def test_parent_child_relationship(self, sample_document):
-        """Test parent-child relationships."""
+        """Test parent-child relationship via metadata."""
         chunker = HierarchicalChunker(
             child_chunk_size=100,
             parent_chunk_size=300
@@ -66,27 +66,24 @@ class TestHierarchicalChunker:
 
         child_nodes, parent_map = chunker.chunk_documents([sample_document])
 
-        # Verify metadata
         for child in child_nodes:
             assert "parent_id" in child.metadata
             assert "child_index" in child.metadata
 
     def test_multiple_documents(self, sample_documents):
-        """Test chunking multiple documents."""
+        """Test chunking preserves document source information."""
         chunker = HierarchicalChunker()
 
         child_nodes, parent_map = chunker.chunk_documents(sample_documents)
 
-        # Should have chunks from all documents
         assert len(child_nodes) > len(sample_documents)
 
-        # Check file names preserved
-        file_names = set()
-        for child in child_nodes:
-            file_name = child.metadata.get("file_name")
-            if file_name:
-                file_names.add(file_name)
-
+        # Check file names are preserved
+        file_names = {
+            child.metadata.get("file_name")
+            for child in child_nodes
+            if child.metadata.get("file_name")
+        }
         assert len(file_names) == len(sample_documents)
 
     def test_get_stats(self, sample_documents):
@@ -95,10 +92,10 @@ class TestHierarchicalChunker:
 
         stats = chunker.get_stats(sample_documents)
 
-        assert "total_documents" in stats
+        assert stats["total_documents"] == len(sample_documents)
         assert "total_parent_chunks" in stats
         assert "total_child_chunks" in stats
-        assert stats["total_documents"] == len(sample_documents)
+        assert stats["total_child_chunks"] > 0
 
 
 class TestSimpleChunker:

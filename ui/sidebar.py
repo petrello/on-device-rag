@@ -1,66 +1,63 @@
 """
 Sidebar components.
-Displays system info, settings, and controls.
+
+Displays system info, settings, and controls in the Streamlit sidebar.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
+
 import streamlit as st
+
 from config import settings
-from utils import get_memory_usage, cleanup_memory
+from utils import cleanup_memory, get_memory_usage
+
+if TYPE_CHECKING:
+    from memory.conversation import ConversationMemory
+    from storage.vector_store import VectorStoreInterface
 
 logger = logging.getLogger(__name__)
 
 
-def render_sidebar(vector_store, conversation_memory=None):
+def render_sidebar(
+    vector_store: VectorStoreInterface,
+    conversation_memory: Optional[ConversationMemory] = None,
+) -> None:
     """
-    Render complete sidebar.
+    Render the complete sidebar with system info and controls.
 
     Args:
-        vector_store: Vector store instance
-        conversation_memory: Conversation memory instance
+        vector_store: Vector store instance for stats.
+        conversation_memory: Conversation memory for clear action.
     """
     with st.sidebar:
         st.header("ℹ️ System Info")
 
-        # Display stats
         _display_stats(vector_store)
-
         st.markdown("---")
 
-        # Control buttons
         _display_controls(conversation_memory)
-
         st.markdown("---")
 
-        # Settings display
         _display_settings()
-
         st.markdown("---")
 
-        # Memory usage
         _display_memory_usage()
 
 
-def _display_stats(vector_store):
-    """Display system statistics."""
+def _display_stats(vector_store: VectorStoreInterface) -> None:
+    """Display vector store statistics."""
     try:
         stats = vector_store.get_stats()
 
         col1, col2 = st.columns(2)
-
         with col1:
-            st.metric(
-                "Documents",
-                stats.get("vector_count", 0)
-            )
-
+            st.metric("Documents", stats.get("vector_count", 0))
         with col2:
-            st.metric(
-                "Backend",
-                stats.get("backend", "unknown").upper()
-            )
+            st.metric("Backend", stats.get("backend", "unknown").upper())
 
-        # Additional stats in expander
         with st.expander("📊 Detailed Stats"):
             st.json(stats)
 
@@ -69,8 +66,8 @@ def _display_stats(vector_store):
         st.warning("Unable to load stats")
 
 
-def _display_controls(conversation_memory):
-    """Display control buttons."""
+def _display_controls(conversation_memory: Optional[ConversationMemory]) -> None:
+    """Display control buttons for clearing chat and freeing memory."""
     col1, col2 = st.columns(2)
 
     with col1:
@@ -87,8 +84,8 @@ def _display_controls(conversation_memory):
             st.success("✓ Cleaned", icon="✅")
 
 
-def _display_settings():
-    """Display current settings."""
+def _display_settings() -> None:
+    """Display current RAG configuration settings."""
     with st.expander("⚙️ Settings"):
         st.markdown("**RAG Configuration:**")
 
@@ -114,8 +111,8 @@ def _display_settings():
         st.text(f"Metrics: {'✓' if settings.ENABLE_METRICS else '✗'}")
 
 
-def _display_memory_usage():
-    """Display memory usage."""
+def _display_memory_usage() -> None:
+    """Display memory usage progress bar and details."""
     if not settings.ENABLE_MEMORY_PROFILING:
         return
 
@@ -125,25 +122,24 @@ def _display_memory_usage():
 
     st.markdown("**💾 Memory Usage:**")
 
-    # Progress bar
     memory_percent = min(mem_info["percent"] / 100, 1.0)
     st.progress(memory_percent)
-
-    # Details
     st.caption(f"{mem_info['rss_mb']:.0f}MB ({mem_info['percent']:.1f}%)")
 
-    # Warning if high
     if mem_info["rss_mb"] > settings.AUTO_CLEANUP_THRESHOLD_MB:
         st.warning("⚠️ High memory usage", icon="⚠️")
 
 
-def render_document_stats(doc_count: int, file_types: dict = None):
+def render_document_stats(
+    doc_count: int,
+    file_types: Optional[Dict[str, int]] = None,
+) -> None:
     """
     Display document statistics.
 
     Args:
-        doc_count: Number of documents
-        file_types: Dictionary of file type counts
+        doc_count: Total number of documents.
+        file_types: Mapping of extension to count.
     """
     st.metric("Total Documents", doc_count)
 
@@ -153,22 +149,26 @@ def render_document_stats(doc_count: int, file_types: dict = None):
                 st.text(f"{ext.upper()}: {count}")
 
 
-def render_quick_actions():
-    """Render quick action buttons."""
+def render_quick_actions() -> Tuple[bool, bool]:
+    """
+    Render quick action buttons.
+
+    Returns:
+        Tuple of (refresh_clicked, upload_clicked).
+    """
     st.markdown("### ⚡ Quick Actions")
 
     col1, col2 = st.columns(2)
 
     with col1:
         refresh = st.button("🔄 Refresh Index", use_container_width=True)
-
     with col2:
         upload = st.button("📤 Upload Docs", use_container_width=True)
 
     return refresh, upload
 
 
-def render_help_section():
+def render_help_section() -> None:
     """Render help and tips section."""
     with st.expander("❓ Help & Tips"):
         st.markdown("""
@@ -188,8 +188,8 @@ def render_help_section():
         """)
 
 
-def render_metrics_link():
-    """Render link to metrics."""
+def render_metrics_link() -> None:
+    """Render link to Prometheus metrics endpoint."""
     if settings.ENABLE_METRICS:
         st.markdown(
             f"[📊 View Metrics](http://localhost:{settings.METRICS_PORT}/metrics)"

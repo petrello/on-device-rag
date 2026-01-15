@@ -1,45 +1,58 @@
 """
 Main Streamlit application.
+
+This is the entry point for the On-Device RAG system. It initializes
+all components (models, vector store, indexer) and provides the chat
+interface for document Q&A.
 """
 
-import streamlit as st
+from __future__ import annotations
+
 import logging
 import time
+from typing import TYPE_CHECKING, Dict, Tuple
+
+import streamlit as st
 
 # Setup logging before other imports
 from monitoring.logger import setup_logging
 setup_logging()
 
-from llama_index.core import VectorStoreIndex, Settings, PromptTemplate
+from llama_index.core import PromptTemplate, Settings, VectorStoreIndex
 
+from citation import CitationExtractor
 from config import settings
 from core import get_chunker, get_embedding_model, get_llm, get_retriever
-from storage import get_vector_store
+from document_management import DocumentIndexer, DocumentProcessor
 from memory import ConversationMemory
-from citation import CitationExtractor
-from document_management import DocumentProcessor, DocumentIndexer
 from monitoring import (
-    start_metrics_server,
-    track_query_metrics,
     PerformanceDashboard,
-    display_system_info,
     display_prometheus_link,
-    PerformanceTracker,
+    display_system_info,
+    start_metrics_server
 )
+from storage import get_vector_store
 from ui import (
     display_chat_history,
-    render_chat_input,
     display_welcome_message,
     format_streaming_response,
+    render_chat_input,
+    render_document_manager,
     render_sidebar,
-    render_document_manager
 )
 from utils import (
-    cleanup_memory,
     check_memory_threshold,
+    cleanup_memory,
+    sanitize_text,
     validate_query,
-    sanitize_text
 )
+
+if TYPE_CHECKING:
+    from core.chunking import HierarchicalChunker, SimpleChunker
+    from core.retrieval import HybridRetriever, VectorOnlyRetriever
+    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+    from llama_index.llms.llama_cpp import LlamaCPP
+    from storage.vector_store import VectorStoreInterface
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +61,10 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 st.set_page_config(
-    page_title="On-device RAG",
+    page_title="On-Device RAG",
     page_icon="📑",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 # =============================================================================
@@ -70,31 +83,31 @@ if settings.ENABLE_METRICS:
 # =============================================================================
 
 @st.cache_resource
-def initialize_models():
-    """Initialize LLM and embedding models."""
+def initialize_models() -> Tuple[LlamaCPP, HuggingFaceEmbedding, HierarchicalChunker | SimpleChunker]:
+    """
+    Initialize LLM, embedding model, and chunker.
+
+    Returns:
+        Tuple of (llm, embed_model, chunker).
+    """
     logger.info("Initializing models...")
 
     try:
-        # Get embedding model
         embed_model = get_embedding_model()
         logger.info("Embedding model loaded")
 
-        # Get LLM
         llm = get_llm()
         logger.info("LLM loaded")
 
-        # Get chunker
         chunker = get_chunker()
         logger.info(
-            f"Chunker initialized: "
-            f"{'Hierarchical' if settings.USE_HIERARCHICAL_CHUNKING else 'Simple'}"
+            f"Chunker: {'Hierarchical' if settings.USE_HIERARCHICAL_CHUNKING else 'Simple'}"
         )
 
-        # Set global settings
+        # Set global LlamaIndex settings
         Settings.llm = llm
         Settings.embed_model = embed_model
 
-        # Set text splitter
         if hasattr(chunker, 'child_splitter'):
             Settings.text_splitter = chunker.child_splitter
         else:
@@ -110,13 +123,18 @@ def initialize_models():
 
 
 @st.cache_resource
-def initialize_vector_store():
-    """Initialize vector store."""
+def initialize_vector_store() -> VectorStoreInterface:
+    """
+    Initialize the vector store backend.
+
+    Returns:
+        Configured vector store instance.
+    """
     logger.info("Initializing vector store...")
 
     try:
         vector_store = get_vector_store()
-        logger.info(f"Vector store initialized: {settings.VECTOR_STORE_TYPE}")
+        logger.info(f"Vector store: {settings.VECTOR_STORE_TYPE}")
         return vector_store
 
     except Exception as e:
@@ -126,21 +144,31 @@ def initialize_vector_store():
 
 
 @st.cache_resource
-def initialize_index(_vector_store, _chunker):
-    """Initialize document index."""
+def initialize_index(
+    _vector_store: VectorStoreInterface,
+    _chunker: HierarchicalChunker | SimpleChunker,
+) -> Tuple[VectorStoreIndex, Dict[str, str], DocumentIndexer, HybridRetriever | VectorOnlyRetriever]:
+    """
+    Initialize the document index.
+
+    Args:
+        _vector_store: Vector store backend.
+        _chunker: Document chunker.
+
+    Returns:
+        Tuple of (index, parent_map, indexer, retriever).
+    """
     logger.info("Initializing document index...")
 
     try:
-        # Check for documents
         doc_processor = DocumentProcessor()
         documents = doc_processor.load_documents()
 
         if not documents:
-            st.warning("⚠️ No documents found in data directory. Please add documents to continue.")
+            st.warning("⚠️ No documents found in data directory.")
             st.info(f"📁 Add PDF, TXT, DOCX, or MD files to: `{settings.DATA_DIR}`")
             st.stop()
 
-        # Validate and preprocess documents
         documents = doc_processor.preprocess_documents(documents)
         valid_docs, errors = doc_processor.validate_documents(documents)
 
@@ -153,19 +181,12 @@ def initialize_index(_vector_store, _chunker):
 
         logger.info(f"Loaded {len(valid_docs)} documents")
 
-        # Get retriever
         retriever = get_retriever()
-
-        # Create indexer and index documents
         indexer = DocumentIndexer(_vector_store, retriever)
 
         with st.spinner("Building index... This may take a few minutes."):
-            index, parent_map = indexer.index_documents(
-                valid_docs,
-                show_progress=True
-            )
+            index, parent_map = indexer.index_documents(valid_docs, show_progress=True)
 
-        # Get stats
         stats = indexer.get_indexing_stats(index)
         logger.info(f"Indexing complete: {stats}")
 
@@ -194,12 +215,10 @@ QA_PROMPT = PromptTemplate(
 # MAIN APPLICATION
 # =============================================================================
 
-def main():
-    """Main application logic."""
-
-    # Header
-    st.title("📑 Edge RAG System")
-    st.markdown("*Production-ready RAG for edge devices*")
+def main() -> None:
+    """Main application entry point."""
+    st.title("📑 On-Device RAG")
+    st.markdown("*Local RAG for resource-constrained devices*")
 
     # Initialize performance dashboard
     if 'dashboard' not in st.session_state:
@@ -218,9 +237,8 @@ def main():
         render_monitoring_tab()
 
 
-def render_chat_tab():
-    """Render main chat interface."""
-
+def render_chat_tab() -> None:
+    """Render the main chat interface."""
     # Initialize models
     with st.spinner("Loading models..."):
         llm, embed_model, chunker = initialize_models()
@@ -426,17 +444,17 @@ def render_chat_tab():
                     st.error(error_msg)
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
 
-def render_documents_tab():
-    """Render document management interface."""
+
+def render_documents_tab() -> None:
+    """Render the document management interface."""
     render_document_manager()
 
     st.markdown("---")
     st.info(
         "💡 **Note:** After uploading or deleting documents, "
-        "please restart the application to rebuild the index."
+        "restart the application to rebuild the index."
     )
 
-    # Display document statistics
     doc_processor = DocumentProcessor()
     try:
         documents = doc_processor.load_documents()
@@ -461,24 +479,18 @@ def render_documents_tab():
         logger.error(f"Failed to load document stats: {e}")
 
 
-def render_monitoring_tab():
-    """Render monitoring and metrics."""
+def render_monitoring_tab() -> None:
+    """Render the monitoring and metrics dashboard."""
     st.header("📊 System Monitoring")
 
-    # Display performance dashboard
     st.session_state.dashboard.display_metrics()
 
     st.markdown("---")
-
-    # Display system info
     display_system_info()
 
     st.markdown("---")
-
-    # Display Prometheus link
     display_prometheus_link()
 
-    # Additional monitoring features
     with st.expander("🔧 Advanced Monitoring"):
         st.markdown("""
         **Available Metrics:**
@@ -489,8 +501,8 @@ def render_monitoring_tab():
         - Document count
         
         **Grafana Dashboard:**
-        Configure Grafana to visualize these metrics.
-        Import the dashboard from `monitoring/dashboard.json`
+        Configure Grafana to visualize metrics.
+        Import the dashboard from `monitoring/grafana/dashboards/`
         """)
 
 
@@ -504,4 +516,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Application error: {e}", exc_info=True)
         st.error(f"Application error: {e}")
-        st.info("Please check logs for details and restart the application.")
+        st.info("Check logs for details and restart the application.")

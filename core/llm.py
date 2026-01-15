@@ -1,32 +1,51 @@
 """
 LLM initialization and management.
-Handles loading and configuration of local LLM models.
+
+Provides singleton-based loading of local LLM models in GGUF format,
+optimized for CPU-only inference on resource-constrained devices.
 """
 
+from __future__ import annotations
+
+import gc
 import logging
 from pathlib import Path
 from typing import Optional
+
 from llama_index.llms.llama_cpp import LlamaCPP
+
 from config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class LLMManager:
-    """Manages LLM model lifecycle."""
+    """
+    Manages LLM model lifecycle with singleton pattern.
+
+    The model is loaded once and reused to avoid repeated initialization
+    overhead (GGUF loading can take 10-30 seconds).
+
+    Attributes:
+        _instance: Singleton LLM instance.
+    """
 
     _instance: Optional[LlamaCPP] = None
 
     @classmethod
     def get_llm(cls, force_reload: bool = False) -> LlamaCPP:
         """
-        Get or create LLM instance (singleton pattern).
+        Get or create the LLM instance (singleton).
 
         Args:
-            force_reload: Force reload of model
+            force_reload: Force reload even if model is already loaded.
 
         Returns:
-            LlamaCPP instance
+            The LlamaCPP model instance.
+
+        Raises:
+            FileNotFoundError: If the model file does not exist.
+            RuntimeError: If model fails to load.
         """
         if cls._instance is None or force_reload:
             model_path = Path(settings.LLM_MODEL_PATH)
@@ -34,15 +53,14 @@ class LLMManager:
             if not model_path.exists():
                 raise FileNotFoundError(
                     f"LLM model not found at: {model_path}\n"
-                    f"Please download a GGUF model and place it in the models/ directory."
+                    "Download a GGUF model and place it in the models/ directory."
                 )
 
-            logger.info(f"Loading LLM model: {model_path}")
+            logger.info(f"Loading LLM: {model_path.name}")
             logger.info(
-                f"Configuration: "
-                f"temperature={settings.LLM_TEMPERATURE}, "
+                f"Config: temp={settings.LLM_TEMPERATURE}, "
                 f"max_tokens={settings.LLM_MAX_TOKENS}, "
-                f"context_window={settings.LLM_CONTEXT_WINDOW}"
+                f"ctx={settings.LLM_CONTEXT_WINDOW}"
             )
 
             try:
@@ -52,41 +70,36 @@ class LLMManager:
                     max_new_tokens=settings.LLM_MAX_TOKENS,
                     context_window=settings.LLM_CONTEXT_WINDOW,
                     model_kwargs={
-                        "n_gpu_layers": 0,  # Force CPU
+                        "n_gpu_layers": 0,  # Force CPU-only
                         "n_threads": settings.LLM_THREADS,
                         "n_batch": settings.LLM_BATCH_SIZE,
-                        "use_mlock": True,#False  # Don't lock memory
-                        "use_mmap": False, #True # Use memory mapping
-                        "low_vram": True,  # Enable low VRAM mode
+                        "use_mlock": True,  # Lock model in RAM
+                        "use_mmap": False,  # Disable mmap for stability
+                        "low_vram": True,   # Enable low memory mode
                     },
                     verbose=False,
                 )
-
-                logger.info("LLM model loaded successfully")
-
+                logger.info("LLM loaded successfully")
             except Exception as e:
-                logger.error(f"Failed to load LLM model: {e}")
-                raise
+                logger.error(f"Failed to load LLM: {e}")
+                raise RuntimeError(f"LLM initialization failed: {e}") from e
 
         return cls._instance
 
     @classmethod
-    def unload_model(cls):
-        """Unload model to free memory."""
+    def unload_model(cls) -> None:
+        """Unload the LLM to free memory."""
         if cls._instance is not None:
             logger.info("Unloading LLM model")
             cls._instance = None
-
-            # Force garbage collection
-            import gc
             gc.collect()
 
 
 def get_llm() -> LlamaCPP:
     """
-    Convenience function to get LLM.
+    Convenience function to get the LLM.
 
     Returns:
-        LlamaCPP instance
+        The singleton LlamaCPP instance.
     """
     return LLMManager.get_llm()
