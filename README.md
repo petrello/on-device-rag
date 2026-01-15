@@ -2,7 +2,7 @@
 
 > **Experimental Retrieval-Augmented Generation for Resource-Constrained Devices**
 
-A lightweight, CPU-only RAG system designed for local deployment on edge devices, laptops, and air-gapped environments. Built with LlamaIndex, it runs entirely offline without requiring GPUs or cloud APIs.
+A lightweight, CPU-only RAG system designed for deployment on edge devices, laptops, and air-gapped environments. Enables local LLM inference with advanced retrieval techniques, all within a Dockerized setup for cross-platform compatibility.
 
 ---
 
@@ -12,17 +12,12 @@ A lightweight, CPU-only RAG system designed for local deployment on edge devices
 
 - Created for learning, experimentation, and academic use
 - Optimized for constrained hardware (≤4 CPU cores, ≤6GB RAM)
-- Actively developed; APIs may change
 
 ---
 
 ## 🎯 What This Project Is
 
-On-Device RAG is a personal project that demonstrates how to build a complete RAG pipeline that runs locally on modest hardware. It's designed for:
-
-- **Students & Researchers** exploring RAG architectures
-- **ML Engineers** prototyping edge deployment scenarios
-- **Privacy-conscious users** who need fully offline document Q&A
+On-Device RAG is a personal project built entirely on open-source components, that demonstrates how to build a complete RAG pipeline that runs locally on modest hardware.
 
 ### Key Capabilities
 
@@ -190,11 +185,11 @@ Supported formats: PDF, TXT, DOCX, MD
 docker compose up --build
 ```
 
-Wait for initialization (~2-5 minutes on first run), then open:
+Wait for initialization (~10-15 minutes on first run), then open:
 
 - **Chat UI**: http://localhost:8501
 - **Qdrant Dashboard**: http://localhost:6333/dashboard
-- **Metrics**: http://localhost:8001/metrics (if enabled)
+- **Metrics**: http://localhost:8001/metrics
 
 ### 5. Stop the Application
 
@@ -208,10 +203,13 @@ docker compose down
 
 This section provides comprehensive Docker commands for managing the application.
 
+> If you're new to Docker, `docker compose up --build` is usually all you need.
+
+
 ### Building & Starting
 
 ```bash
-# Build and start all containers (first time or after code changes)
+# Build and start all containers (first time, or after dependency/Dockerfile changes)
 docker compose up --build
 
 # Start without rebuilding (faster, uses cached images)
@@ -295,9 +293,41 @@ docker compose inspect rag-app
 
 ---
 
+## 📦 Locking the Python Environment
+
+To improve reproducibility, you can store the exact versions of all installed Python dependencies in a `requirements.lock` file.
+
+> **Note:**
+> requirements.txt defines the intended dependencies, while requirements.lock records the resolved environment at a specific point in time.
+> The lock file is optional but recommended for experiments and long-term reproducibility.
+
+### Generate `requirements.lock`
+
+From inside the running environment (recommended):
+
+```bash
+# Inside the Docker container
+docker compose exec rag-app pip freeze > requirements.lock
+```
+
+Or when running locally without Docker:
+
+```bash
+pip freeze > requirements.lock
+```
+
+This captures the exact dependency versions currently in use.
+
+### Recreate the Environment from the `.lock` File
+```bash
+pip install -r requirements.lock
+```
+
+---
+
 ## 📊 Memory Profiling
 
-The application includes built-in memory profiling to help optimize performance on resource-constrained devices.
+The application includes built-in memory profiling to help monitoring the performance on resource-constrained devices.
 
 ### What Profiling Provides
 
@@ -307,13 +337,6 @@ Memory profiling tracks:
 - **VMS (Virtual Memory Size)**: Total virtual memory allocated
 - **Memory percentage**: Proportion of system memory used
 - **Automatic cleanup triggers**: When memory exceeds configured thresholds
-
-This is useful for:
-
-- Identifying memory leaks during development
-- Optimizing chunk sizes and batch parameters
-- Monitoring production deployments
-- Understanding memory patterns during inference
 
 ### Enabling Memory Profiling
 
@@ -327,117 +350,12 @@ ENABLE_MEMORY_PROFILING=true
 docker compose run -e ENABLE_MEMORY_PROFILING=true rag-app
 ```
 
-### Running with Profiling via Docker
-
-```bash
-# Start with memory profiling enabled
-docker compose run -e ENABLE_MEMORY_PROFILING=true -p 8501:8501 rag-app
-
-# Or modify docker-compose.yml to include:
-# environment:
-#   - ENABLE_MEMORY_PROFILING=true
-```
-
-When profiling is enabled, you'll see:
-
-1. **Memory usage in the sidebar**: Real-time RSS and percentage display
-2. **Memory warnings**: Alerts when usage exceeds `AUTO_CLEANUP_THRESHOLD_MB`
-3. **Automatic garbage collection**: Triggered when thresholds are exceeded
-
 ### Profiling Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ENABLE_MEMORY_PROFILING` | `false` | Show memory stats in UI |
 | `AUTO_CLEANUP_THRESHOLD_MB` | `5000` | Trigger GC when RSS exceeds this |
-
-### Advanced Profiling
-
-For detailed memory analysis, you can use Python's built-in profilers:
-
-```bash
-# Run with memory profiler (requires installing memory-profiler)
-docker compose exec rag-app python -m memory_profiler app.py
-
-# Profile specific functions by adding @profile decorator
-# Then run with:
-docker compose exec rag-app python -m memory_profiler -o mem_report.txt app.py
-```
-
-### Monitoring with Prometheus
-
-Memory metrics are also exposed via Prometheus:
-
-```bash
-# View raw metrics
-curl http://localhost:8001/metrics | grep rag_memory
-
-# Example output:
-# rag_memory_usage_mb 1234.5
-```
-
----
-
-## ⚙️ Configuration
-
-Configuration is managed via environment variables or a `.env` file.
-
-### Core Settings
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VECTOR_STORE_TYPE` | `qdrant` | Vector backend: `qdrant` or `faiss` |
-| `QDRANT_URL` | `http://localhost:6333` | Qdrant connection URL |
-| `LLM_MODEL_PATH` | `models/llama-3.2-1b-instruct-q8_0.gguf` | Path to GGUF model |
-| `EMBEDDING_MODEL` | `ibm-granite/granite-embedding-278m-multilingual` | HuggingFace model ID |
-
-### Chunking
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CHUNK_SIZE` | `400` | Child chunk size (tokens) |
-| `PARENT_CHUNK_SIZE` | `1200` | Parent chunk size (tokens) |
-| `CHUNK_OVERLAP` | `40` | Overlap between chunks |
-| `USE_HIERARCHICAL_CHUNKING` | `false` | Enable parent-child chunking |
-
-### Retrieval
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SIMILARITY_TOP_K` | `3` | Number of chunks to retrieve |
-| `USE_HYBRID_SEARCH` | `false` | Enable vector + BM25 hybrid |
-| `HYBRID_ALPHA` | `0.7` | Vector weight (0=BM25, 1=vector) |
-
-### LLM Parameters
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LLM_TEMPERATURE` | `0.0` | Generation temperature |
-| `LLM_MAX_TOKENS` | `4096` | Max tokens to generate |
-| `LLM_CONTEXT_WINDOW` | `8192` | Context window size |
-| `LLM_THREADS` | `4` | CPU threads for inference |
-
-### Example `.env` File
-
-```bash
-# Vector Store
-VECTOR_STORE_TYPE=qdrant
-QDRANT_URL=http://qdrant:6333
-
-# Models
-LLM_MODEL_PATH=models/llama-3.2-1b-instruct-q8_0.gguf
-EMBEDDING_MODEL=ibm-granite/granite-embedding-278m-multilingual
-
-# Retrieval
-USE_HIERARCHICAL_CHUNKING=true
-USE_HYBRID_SEARCH=true
-HYBRID_ALPHA=0.7
-SIMILARITY_TOP_K=5
-
-# Performance
-LLM_THREADS=4
-LLM_MAX_TOKENS=2048
-```
 
 ---
 
@@ -479,33 +397,16 @@ Use `HYBRID_ALPHA` to balance semantic vs. keyword matching.
 
 ## 📊 Performance Considerations
 
-### Hardware Requirements
-
-| Resource | Minimum | Recommended |
-|----------|---------|-------------|
-| CPU Cores | 2 | 4 |
-| RAM | 4GB | 8GB |
-| Disk | 5GB | 20GB |
-
-### Memory Optimization
-
-The system includes automatic memory management:
-
-- Singleton pattern for models (loaded once)
-- Automatic garbage collection when threshold exceeded
-- Memory-mapped model loading (configurable)
-
 ### Typical Latencies
 
-On a 4-core CPU with 8GB RAM:
+On a 4-core CPU with 6GB RAM:
 
 | Operation | Typical Time |
-|-----------|--------------|
-| Model loading | 10-30s |
-| Document indexing | 5-30s (varies by size) |
-| Query retrieval | 0.1-0.5s |
-| LLM inference | 5-30s (varies by response length) |
-| Time to first token | 0.5-2s |
+|-----------|------------|
+| Model loading | 5-10s      |
+| Query retrieval | 0.08-0.35s |
+| LLM inference | 5-10s      |
+| Time to first token | 20-45s     |
 
 ---
 
@@ -548,14 +449,6 @@ CMAKE_ARGS="-DGGML_BLAS=ON" pip install llama-cpp-python
 streamlit run app.py
 ```
 
-### Code Style
-
-The project uses:
-
-- Type hints throughout
-- Google-style docstrings
-- `ruff` for linting (see `requirements.txt`)
-
 ---
 
 ## 🗺️ Roadmap
@@ -564,9 +457,8 @@ The project uses:
 
 ### Planned
 
-- [ ] Query caching for repeated questions
-- [ ] Reranking with cross-encoder
-- [ ] Streaming improvements
+- [ ] Query caching to reduce inference time for repeated questions
+- [ ] Reranking to improve precision on ambiguous queries
 - [ ] Better citation extraction
 
 ### Under Consideration
@@ -585,11 +477,11 @@ Contributions are welcome! This is a learning project, so:
 1. **Issues**: Bug reports, questions, and suggestions are all helpful
 2. **Pull Requests**: Keep them focused and well-documented
 3. **Discussions**: Share your experiments and use cases
+4. **Fork**: Feel free to fork and adapt for your own needs
 
 Please note:
 
 - This is a personal project with limited maintenance bandwidth
-- Large architectural changes should be discussed first
 - Performance improvements are especially welcome
 
 ---
@@ -609,17 +501,7 @@ Built with:
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) - CPU inference
 - [Streamlit](https://streamlit.io/) - UI framework
 - [IBM Granite](https://huggingface.co/ibm-granite) - Embedding model
-
----
-
-## 📧 Contact
-
-This is an experimental project by a student researcher. For questions:
-
-- Open an issue on GitHub
-- Check existing discussions
-
----
-
-*Built with ❤️ for the open-source AI community*
+- [TinyLLama](https://huggingface.co/hugging-quants/Llama-3.2-1B-Instruct-Q8_0-GGUF) - Lightweight LLM
+- [Prometheus](https://prometheus.io/) - Monitoring
+- [Grafana](https://grafana.com/) - Dashboard
 
