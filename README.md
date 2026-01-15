@@ -395,21 +395,6 @@ Use `HYBRID_ALPHA` to balance semantic vs. keyword matching.
 
 ---
 
-## 📊 Performance Considerations
-
-### Typical Latencies
-
-On a 4-core CPU with 6GB RAM:
-
-| Operation | Typical Time |
-|-----------|------------|
-| Model loading | 5-10s      |
-| Query retrieval | 0.08-0.35s |
-| LLM inference | 5-10s      |
-| Time to first token | 20-45s     |
-
----
-
 ## 🧪 Testing
 
 Run the test suite:
