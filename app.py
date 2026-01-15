@@ -382,13 +382,22 @@ def render_chat_tab() -> None:
                     )
 
                     overall_latency = time.time() - overall_start_time
+                    
+                    # Calculate tokens per second (excluding TTFT for accurate generation speed)
+                    tokens_per_sec: float | None = None
+                    if ttft is not None and (inference_time - ttft) > 0:
+                        tokens_per_sec = token_count / (inference_time - ttft)
+                    
+                    ttft_str = f"{ttft:.3f}s" if ttft is not None else "N/A"
+                    token_per_second = f"{tokens_per_sec:.2f}" if tokens_per_sec is not None else "N/A"
                     logger.info(
                         f"Query completed - "
                         f"Retrieval: {retrieval_time:.3f}s, "
-                        f"TTFT: {ttft:.3f}s if ttft else 'N/A', "
+                        f"TTFT: {ttft_str}, "
                         f"Inference: {inference_time:.2f}s, "
                         f"Total: {overall_latency:.2f}s, "
-                        f"Tokens: {token_count}"
+                        f"Tokens: {token_count}, "
+                        f"Tokens/s: {token_per_second}"
                     )
 
                     # Handle Citations
@@ -414,7 +423,8 @@ def render_chat_tab() -> None:
                             "ttft": ttft,
                             "inference_time": inference_time,
                             "total_time": overall_latency,
-                            "token_count": token_count
+                            "token_count": token_count,
+                            "tokens_per_sec": tokens_per_sec
                         }
                     })
 
@@ -425,18 +435,17 @@ def render_chat_tab() -> None:
 
                     # Display performance metrics
                     st.markdown("---")
-                    col1, col2, col3, col4 = st.columns(4)
+                    col1, col2, col3, col4, col5 = st.columns(5)
                     with col1:
-                        st.caption(f"🔍 Retrieval: {retrieval_time:.3f}s")
+                        st.caption(f"Retrieval: {retrieval_time:.3f}s")
                     with col2:
-                        if ttft:
-                            st.caption(f"⚡ TTFT: {ttft:.3f}s")
-                        else:
-                            st.caption("⚡ TTFT: N/A")
+                        st.caption(f"TTFT: {ttft_str}")
                     with col3:
-                        st.caption(f"🤖 Inference: {inference_time:.2f}s")
+                        st.caption(f"Inference: {inference_time:.2f}s")
                     with col4:
-                        st.caption(f"📊 Tokens: {token_count}")
+                        st.caption(f"Tokens: {token_count}")
+                    with col5:
+                        st.caption(f"Tokens/s: {token_per_second}")
 
                 except Exception as e:
                     logger.error(f"Query failed: {e}", exc_info=True)
