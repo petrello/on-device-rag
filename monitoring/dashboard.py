@@ -430,6 +430,24 @@ class PerformanceDashboard:
             st.metric("Avg Tokens", f"{stats['avg_tokens_generated']:.0f}")
             st.metric("Avg Throughput", f"{stats['avg_tps']:.1f} tok/s")
 
+        # Display prompt cache stats
+        try:
+            from core.llm import get_cache_stats
+            cache_stats = get_cache_stats()
+
+            st.markdown("**Prompt Cache**")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                status = "✅ Active" if cache_stats["cache_initialized"] else "⏳ Not warmed"
+                st.metric("Cache Status", status)
+            with col2:
+                st.metric("Cached Tokens", cache_stats["cached_tokens"])
+            with col3:
+                enabled = "Enabled" if cache_stats["cache_enabled"] else "Disabled"
+                st.metric("Cache Setting", enabled)
+        except Exception as e:
+            logger.debug(f"Could not get cache stats: {e}")
+
         col1, col2 = st.columns(2)
         with col1:
             if len(self.ttft_history) > 0:

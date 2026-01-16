@@ -10,7 +10,7 @@ This module provides the essential building blocks for the RAG pipeline:
 
 from core.chunking import HierarchicalChunker, SimpleChunker, get_chunker
 from core.embeddings import EmbeddingManager, get_embedding_model
-from core.llm import LLMManager, get_llm
+from core.llm import LLMManager, get_llm, get_cache_stats, reset_prompt_cache
 from core.retrieval import HybridRetriever, VectorOnlyRetriever, get_retriever
 
 __all__ = [
@@ -24,6 +24,8 @@ __all__ = [
     # LLM
     "LLMManager",
     "get_llm",
+    "get_cache_stats",
+    "reset_prompt_cache",
     # Retrieval
     "HybridRetriever",
     "VectorOnlyRetriever",

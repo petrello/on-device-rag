@@ -102,6 +102,10 @@ class Settings(BaseSettings):
         default=512, ge=32, le=2048,
         description="Batch size for token processing",
     )
+    LLM_ENABLE_PROMPT_CACHE: bool = Field(
+        default=True,
+        description="Enable prompt caching for faster TTFT",
+    )
 
     # =========================================================================
     # CHUNKING STRATEGY

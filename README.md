@@ -21,14 +21,15 @@ On-Device RAG is a personal project built entirely on open-source components, th
 
 ### Key Capabilities
 
-| Feature | Description |
-|---------|-------------|
-| **Offline Operation** | No internet required after initial model download |
-| **CPU-Only Inference** | Runs on laptops without dedicated GPUs |
-| **Hierarchical Chunking** | Small chunks for retrieval, large chunks for context |
-| **Hybrid Search** | Combines vector similarity with BM25 keyword matching |
-| **Conversational Memory** | Maintains context across multi-turn conversations |
-| **Docker Deployment** | Consistent environment across platforms |
+| Feature                   | Description                                                                             |
+|---------------------------|-----------------------------------------------------------------------------------------|
+| **Offline Operation**     | No internet required after initial model download                                       |
+| **Multi-linguality**      | Supported languages: English, Italian, German, French, Portuguese, Hindi, Spanish, Thai |
+| **CPU-Only Inference**    | Runs on laptops without dedicated GPUs                                                  |
+| **Hierarchical Chunking** | Small chunks for retrieval, large chunks for context                                    |
+| **Hybrid Search**         | Combines vector similarity with BM25 keyword matching                                   |
+| **Conversational Memory** | Maintains context across multi-turn conversations                                       |
+| **Docker Deployment**     | Consistent environment across platforms                                                 |
 
 ---
 
@@ -442,6 +443,7 @@ streamlit run app.py
 
 ### Planned
 
+- [ ] Optimizations to reduce inference time and TTFT
 - [ ] Query caching to reduce inference time for repeated questions
 - [ ] Reranking to improve precision on ambiguous queries
 - [ ] Better citation extraction
@@ -452,6 +454,7 @@ streamlit run app.py
 - [ ] Knowledge graph integration
 - [ ] Fine-tuning support
 - [ ] WebUI improvements
+- [ ] Support for additional embedding/LLM models
 
 ---
 
@@ -486,7 +489,7 @@ Built with:
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) - CPU inference
 - [Streamlit](https://streamlit.io/) - UI framework
 - [IBM Granite](https://huggingface.co/ibm-granite) - Embedding model
-- [TinyLLama](https://huggingface.co/hugging-quants/Llama-3.2-1B-Instruct-Q8_0-GGUF) - Lightweight LLM
+- [Quantized LLama 3](https://huggingface.co/hugging-quants/Llama-3.2-1B-Instruct-Q8_0-GGUF) - Lightweight LLM
 - [Prometheus](https://prometheus.io/) - Monitoring
 - [Grafana](https://grafana.com/) - Dashboard
 
