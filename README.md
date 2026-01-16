@@ -149,7 +149,7 @@ on-device-rag/
 
 - **Docker Desktop** (v20.10+)
 - **8GB+ RAM** (6GB for containers, 2GB for system)
-- **10GB disk space** (models + indices)
+- **20GB disk space** (docker image + models + indices)
 
 ### 1. Clone & Setup
 
