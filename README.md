@@ -1,3 +1,5 @@
+<img width="1264" height="848" alt="on-device-rag-cover" src="https://github.com/user-attachments/assets/987a27c1-b2bd-4f88-9fdb-e2d9cae42be7" />
+
 # On-Device RAG
 
 > **Experimental Retrieval-Augmented Generation for Resource-Constrained Devices**
